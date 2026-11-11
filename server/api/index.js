@@ -5,6 +5,8 @@ import { config } from '../config.js'
 import { facturasRouter } from '../routes/facturas.js'
 import { ejemplosRouter } from '../routes/ejemplos.js'
 import { analiticaRouter } from '../routes/analitica.js'
+import { usuariosRouter } from '../routes/usuarios_historial.js'
+import { historialRouter } from '../routes/usuarios_historial.js'
 
 const app = express()
 
@@ -15,6 +17,8 @@ app.use(express.urlencoded({ extended: true }))
 app.use('/api/facturas', facturasRouter)
 app.use('/api/ejemplos', ejemplosRouter)
 app.use('/api/analitica', analiticaRouter)
+app.use('/api/usuarios', usuariosRouter)
+app.use('/api/historial', historialRouter)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

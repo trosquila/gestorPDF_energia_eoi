@@ -4,6 +4,7 @@ import { getSupabaseClient } from '../lib/supabase.js'
 import { extractTextFromPdf } from '../lib/pdf.js'
 import { hybridExtract } from '../lib/llm.js'
 import { config } from '../config.js'
+import { createHistorial } from '../lib/supabase.js'
 
 const router = express.Router()
 
@@ -60,6 +61,16 @@ router.post('/upload', upload.single('pdf'), async (req, res, next) => {
       console.error('Supabase insert error:', error)
       return res.status(500).json({ error: 'Error guardando en base de datos' })
     }
+    
+    // Registrar en historial
+    await createHistorial({
+      id_factura: data.id_factura,
+      id_usuario: req.headers['x-user-id'] || null,
+      accion: 'procesar',
+      descripcion: `Factura procesada automáticamente (método: ${extraction.metodo_extraccion})`,
+      ip: req.ip,
+      user_agent: req.headers['user-agent']
+    })
     
     res.json({ data })
   } catch (error) {
@@ -167,6 +178,19 @@ router.patch('/:id', async (req, res, next) => {
       throw error
     }
     
+    // Registrar en historial
+    const camposModificados = Object.keys(req.body).filter(k => !['id_factura', 'created_at', 'updated_at'].includes(k))
+    await createHistorial({
+      id_factura: data.id_factura,
+      id_usuario: req.headers['x-user-id'] || null,
+      accion: 'corregir',
+      campo_modificado: camposModificados.join(', '),
+      valor_nuevo: req.body,
+      descripcion: `Corrección manual de campos: ${camposModificados.join(', ')}`,
+      ip: req.ip,
+      user_agent: req.headers['user-agent']
+    })
+    
     res.json({ data })
   } catch (error) {
     next(error)
@@ -176,12 +200,34 @@ router.patch('/:id', async (req, res, next) => {
 router.delete('/:id', async (req, res, next) => {
   try {
     const supabase = getSupabaseClient(true)
+    const id_factura = req.params.id
+    
+    // Obtener datos antes de borrar para el historial
+    const { data: facturaAntigua } = await supabase
+      .from('facturas')
+      .select('*')
+      .eq('id_factura', id_factura)
+      .single()
+    
     const { error } = await supabase
       .from('facturas')
       .delete()
-      .eq('id_factura', req.params.id)
+      .eq('id_factura', id_factura)
     
     if (error) throw error
+    
+    // Registrar en historial
+    if (facturaAntigua) {
+      await createHistorial({
+        id_factura,
+        id_usuario: req.headers['x-user-id'] || null,
+        accion: 'eliminar',
+        valor_anterior: facturaAntigua,
+        descripcion: `Factura eliminada: ${facturaAntigua.num_factura || 'sin número'} - ${facturaAntigua.comercializadora || 'sin comercializadora'}`,
+        ip: req.ip,
+        user_agent: req.headers['user-agent']
+      })
+    }
     
     res.json({ success: true })
   } catch (error) {
