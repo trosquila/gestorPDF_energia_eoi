@@ -9,7 +9,6 @@ export const useFacturasStore = defineStore('facturas', () => {
   const error = ref(null)
   const metricas = ref(null)
   const analiticaData = ref(null)
-  const ejemplos = ref([])
 
   const totalFacturas = computed(() => facturas.value.length)
   const facturasOk = computed(() => facturas.value.filter(f => f.estado_extraccion === 'ok').length)
@@ -55,10 +54,15 @@ export const useFacturasStore = defineStore('facturas', () => {
       const response = await facturasApi.uploadPdf(file, onProgress)
       const nuevaFactura = response.data.data || response.data
       facturas.value.unshift(nuevaFactura)
+      // Sin esto la vista se quedaba en la zona de subida y no mostraba
+      // el resultado de la extracción.
+      facturaActual.value = nuevaFactura
       return nuevaFactura
     } catch (e) {
-      error.value = e.message
-      throw e
+      // Mensaje real del backend (formato inválido, sin texto, etc.)
+      const detalle = e.response?.data?.error || e.message
+      error.value = detalle
+      throw new Error(detalle)
     } finally {
       loading.value = false
     }
@@ -69,14 +73,16 @@ export const useFacturasStore = defineStore('facturas', () => {
     error.value = null
     try {
       const response = await facturasApi.updateFactura(id, data)
-      const updated = response.data.data || response.data
-      const idx = facturas.value.findIndex(f => f.id_factura === id)
-      if (idx !== -1) facturas.value[idx] = updated
-      if (facturaActual.value?.id_factura === id) facturaActual.value = updated
-      return updated
+      const actualizada = response.data.data || response.data
+      if (facturaActual.value?.id_factura === id) facturaActual.value = actualizada
+      const idx = facturas.value.findIndex((f) => f.id_factura === id)
+      if (idx !== -1) facturas.value[idx] = actualizada
+      return actualizada
     } catch (e) {
-      error.value = e.message
-      throw e
+      // Mensaje real del backend en vez de "Request failed with status code 500"
+      const detalle = e.response?.data?.error || e.message
+      error.value = detalle
+      throw new Error(detalle)
     } finally {
       loading.value = false
     }
@@ -119,19 +125,56 @@ export const useFacturasStore = defineStore('facturas', () => {
     }
   }
 
-  async function cargarEjemplos() {
+  function limpiarFacturaActual() {
+    facturaActual.value = null
+  }
+
+  // Alta manual de rescate: se envía el archivo original + los datos a mano
+  async function crearFacturaManual(archivo, datos = {}, idCliente, onProgress) {
+    loading.value = true
+    error.value = null
     try {
-      const response = await facturasApi.getEjemplos()
-      ejemplos.value = response.data.data || response.data
-      return ejemplos.value
+      const formData = new FormData()
+      if (archivo) formData.append('pdf', archivo)
+      formData.append('id_cliente', idCliente)
+      for (const [clave, valor] of Object.entries(datos)) {
+        if (valor !== undefined && valor !== null && valor !== '') {
+          formData.append(clave, valor)
+        }
+      }
+
+      const response = await facturasApi.crearFacturaManual(formData, onProgress)
+      const factura = response.data.data || response.data
+      facturas.value.unshift(factura)
+      facturaActual.value = factura
+      return { factura, aviso: response.data.aviso || null }
     } catch (e) {
-      error.value = e.message
-      throw e
+      const detalle = e.response?.data?.error || e.message
+      error.value = detalle
+      throw new Error(detalle)
+    } finally {
+      loading.value = false
     }
   }
 
-  function limpiarFacturaActual() {
-    facturaActual.value = null
+  // Asigna cliente a la factura; el backend renombra el archivo en Storage
+  async function asignarCliente(id, idCliente) {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await facturasApi.asignarCliente(id, idCliente)
+      const factura = response.data.data || response.data
+      facturaActual.value = factura
+      const idx = facturas.value.findIndex((f) => f.id_factura === id)
+      if (idx !== -1) facturas.value[idx] = factura
+      return { factura, aviso: response.data.aviso || null }
+    } catch (e) {
+      const detalle = e.response?.data?.error || e.message
+      error.value = detalle
+      throw new Error(detalle)
+    } finally {
+      loading.value = false
+    }
   }
 
   return {
@@ -141,7 +184,6 @@ export const useFacturasStore = defineStore('facturas', () => {
     error,
     metricas,
     analiticaData,
-    ejemplos,
     totalFacturas,
     facturasOk,
     facturasRegla,
@@ -153,7 +195,8 @@ export const useFacturasStore = defineStore('facturas', () => {
     eliminarFactura,
     cargarMetricas,
     cargarAnalitica,
-    cargarEjemplos,
+    asignarCliente,
+    crearFacturaManual,
     limpiarFacturaActual
   }
 })

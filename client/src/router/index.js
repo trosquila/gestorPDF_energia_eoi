@@ -8,6 +8,8 @@ import AuthView from '../views/AuthView.vue'
 
 const routes = [
   { path: '/', name: 'Detalle', component: DetalleView, meta: { requiresAuth: true } },
+  // Detalle de una factura concreta (el botón "Ver" del lote navega aquí)
+  { path: '/detalle/:id', name: 'DetalleFactura', component: DetalleView, meta: { requiresAuth: true } },
   { path: '/lote', name: 'Lote', component: LoteView, meta: { requiresAuth: true } },
   { path: '/analitica', name: 'Analitica', component: AnaliticaView, meta: { requiresAuth: true } },
   { path: '/login', name: 'Login', component: AuthView, meta: { guestOnly: true } },

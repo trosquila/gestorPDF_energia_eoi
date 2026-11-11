@@ -67,7 +67,19 @@ export const facturasApi = {
   deleteFactura: (id) => api.delete(`/facturas/${id}`),
   getMetricas: () => api.get('/facturas/metricas'),
   getAnalitica: (params) => api.get('/analitica', { params }),
-  getEjemplos: () => api.get('/ejemplos')
+  asignarCliente: (id, id_cliente) => api.patch(`/facturas/${id}/cliente`, { id_cliente }),
+  // Alta manual de rescate: archivo + datos escritos a mano
+  crearFacturaManual: (formData, onProgress) => api.post('/facturas/manual', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: onProgress
+  })
+}
+
+export const clientesApi = {
+  list: (params) => api.get('/clientes', { params }),
+  get: (id) => api.get(`/clientes/${id}`),
+  create: (data) => api.post('/clientes', data),
+  update: (id, data) => api.patch(`/clientes/${id}`, data)
 }
 
 export const historialApi = {

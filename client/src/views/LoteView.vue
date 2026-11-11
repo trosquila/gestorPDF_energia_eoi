@@ -5,6 +5,8 @@
       <p class="subtitle">Gestiona y filtra todas las facturas procesadas</p>
     </div>
 
+    <div v-if="errorEliminar" class="error-banner">{{ errorEliminar }}</div>
+
     <div class="metrics-row">
       <div class="metric-card">
         <div class="metric-value">{{ store.totalFacturas }}</div>
@@ -109,9 +111,14 @@
                   <span v-else>-</span>
                 </td>
                 <td>
-                  <button class="btn btn-secondary btn-sm" @click.stop="verDetalle(factura.id_factura)">
-                    Ver
-                  </button>
+                  <div class="acciones-fila">
+                    <button class="btn btn-secondary btn-sm" @click.stop="verDetalle(factura.id_factura)">
+                      Ver
+                    </button>
+                    <button class="btn btn-danger btn-sm" @click.stop="pedirEliminar(factura)">
+                      Eliminar
+                    </button>
+                  </div>
                 </td>
               </tr>
               <tr v-if="facturasFiltradas.length === 0">
@@ -122,6 +129,29 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmación de borrado (borrado lógico: la factura queda inactiva) -->
+  <div v-if="facturaAEliminar" class="modal-fondo" @click.self="facturaAEliminar = null">
+    <div class="modal-card">
+      <h3>¿Eliminar la factura?</h3>
+      <p class="modal-texto">
+        Se marcará como <strong>inactiva</strong> y desaparecerá de la tabla.
+        El archivo se conserva en el almacenamiento, así que no se pierde nada.
+      </p>
+      <p class="modal-texto">
+        Factura: <strong>{{ facturaAEliminar.num_factura || 'sin número' }}</strong>
+        <template v-if="facturaAEliminar.comercializadora"> · {{ facturaAEliminar.comercializadora }}</template>
+      </p>
+      <div class="modal-acciones">
+        <button class="btn btn-secondary" @click="facturaAEliminar = null" :disabled="eliminando">
+          Cancelar
+        </button>
+        <button class="btn btn-danger" @click="confirmarEliminar" :disabled="eliminando">
+          {{ eliminando ? 'Eliminando…' : 'Sí, eliminar' }}
+        </button>
       </div>
     </div>
   </div>
@@ -218,6 +248,29 @@ function verDetalle(id) {
   router.push(`/detalle/${id}`)
 }
 
+// === Eliminar (borrado lógico) ===
+const facturaAEliminar = ref(null)
+const eliminando = ref(false)
+const errorEliminar = ref(null)
+
+function pedirEliminar(factura) {
+  facturaAEliminar.value = factura
+}
+
+async function confirmarEliminar() {
+  if (!facturaAEliminar.value) return
+  eliminando.value = true
+  errorEliminar.value = null
+  try {
+    await store.eliminarFactura(facturaAEliminar.value.id_factura)
+    facturaAEliminar.value = null
+  } catch (e) {
+    errorEliminar.value = 'No se pudo eliminar: ' + e.message
+  } finally {
+    eliminando.value = false
+  }
+}
+
 onMounted(async () => {
   await store.cargarFacturas()
   await store.cargarMetricas()
@@ -270,5 +323,60 @@ onMounted(async () => {
 
 .confidence-indicator {
   justify-content: center;
+}
+
+/* ===== Acciones y modal de borrado ===== */
+.acciones-fila {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.error-banner {
+  margin-bottom: 1rem;
+  padding: 0.7rem 1rem;
+  border-radius: 8px;
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+  font-size: 0.875rem;
+}
+
+.modal-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.modal-card {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border-radius: 12px;
+  padding: 1.75rem;
+  width: min(480px, 100%);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.modal-card h3 {
+  margin: 0 0 1rem;
+  font-size: 1.15rem;
+}
+
+.modal-texto {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.modal-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
 }
 </style>
