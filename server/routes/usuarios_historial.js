@@ -8,7 +8,9 @@ import {
   verifyPassword,
   createHistorial,
   getHistorialByFactura,
-  getHistorial
+  getHistorial,
+  createSolicitud,
+  getSolicitudPorEmail
 } from '../lib/supabase.js'
 
 const BCRYPT_ROUNDS = 12
@@ -17,20 +19,42 @@ const router = express.Router()
 
 // === USUARIOS ===
 
-// POST /api/usuarios - Crear usuario
+// POST /api/usuarios - Solicitar alta (queda pendiente de aprobación)
 router.post('/', async (req, res, next) => {
   try {
     const { email, password, nombre, rol } = req.body
     if (!email) return res.status(400).json({ error: 'email es requerido' })
     if (!password) return res.status(400).json({ error: 'password es requerido' })
+    if (!nombre || !nombre.trim()) return res.status(400).json({ error: 'nombre es requerido' })
     if (password.length < 8) return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' })
-    
+
     const existing = await getUsuarioByEmail(email)
     if (existing) return res.status(409).json({ error: 'El email ya existe' })
-    
-    const usuario = await createUsuario({ email, password, nombre, rol })
-    res.status(201).json({ data: usuario })
+
+    // El alta NO crea usuario: se guarda como solicitud para que la apruebe un admin
+    const password_hash = await bcrypt.hash(password, BCRYPT_ROUNDS)
+    const solicitud = await createSolicitud({
+      nombre: nombre.trim(),
+      email: email.trim().toLowerCase(),
+      password_hash,
+      rol: rol || 'lector'
+    })
+
+    res.status(202).json({
+      data: solicitud,
+      mensaje: 'Solicitud enviada. Un administrador debe aprobarla antes de que puedas entrar.'
+    })
   } catch (error) {
+    // Solicitud pendiente duplicada (índice único por email)
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Ya tienes una solicitud pendiente con ese correo' })
+    }
+    // Tabla de solicitudes sin crear todavía
+    if (error.code === 'PGRST205' || /solicitudes_registro/.test(error.message || '')) {
+      return res.status(503).json({
+        error: 'El registro aún no está disponible: falta ejecutar server/sql/07_solicitudes.sql'
+      })
+    }
     next(error)
   }
 })
@@ -45,6 +69,24 @@ router.post('/login', async (req, res, next) => {
     
     const usuario = await verifyPassword(email, password)
     if (!usuario) {
+      // Puede tener una solicitud pendiente o rechazada: se le explica
+      try {
+        const solicitud = await getSolicitudPorEmail(email)
+        if (solicitud?.estado === 'pendiente') {
+          return res.status(403).json({
+            error: 'Tu solicitud de alta está pendiente de aprobación. Te avisaremos cuando un administrador la revise.'
+          })
+        }
+        if (solicitud?.estado === 'rechazada') {
+          return res.status(403).json({
+            error: solicitud.motivo_rechazo
+              ? `Tu solicitud fue rechazada: ${solicitud.motivo_rechazo}`
+              : 'Tu solicitud de alta fue rechazada.'
+          })
+        }
+      } catch {
+        // Si la tabla no existe todavía, se responde con el mensaje genérico
+      }
       return res.status(401).json({ error: 'Credenciales inválidas' })
     }
     

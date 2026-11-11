@@ -212,3 +212,84 @@ export async function updateCliente(id_cliente, updates) {
   if (error) throw error
   return data
 }
+
+// === SOLICITUDES DE REGISTRO ===
+export async function createSolicitud({ nombre, email, password_hash, rol = 'lector' }) {
+  const client = getSupabaseClient(true)
+  const { data, error } = await client
+    .from('solicitudes_registro')
+    .insert({ nombre, email, password_hash, rol, estado: 'pendiente' })
+    .select('id_solicitud, nombre, email, rol, estado, created_at')
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function getSolicitudes({ estado, limit = 200 } = {}) {
+  const client = getSupabaseClient(true)
+  let query = client
+    .from('solicitudes_registro')
+    .select('id_solicitud, nombre, email, rol, estado, motivo_rechazo, revisado_at, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (estado) query = query.eq('estado', estado)
+
+  const { data, error } = await query
+  if (error) throw error
+  return data
+}
+
+export async function getSolicitudById(id_solicitud) {
+  const client = getSupabaseClient(true)
+  const { data, error } = await client
+    .from('solicitudes_registro')
+    .select('*')
+    .eq('id_solicitud', id_solicitud)
+    .maybeSingle()
+
+  if (error) throw error
+  return data
+}
+
+// Última solicitud de ese correo (para explicar por qué no puede entrar)
+export async function getSolicitudPorEmail(email) {
+  const client = getSupabaseClient(true)
+  const { data, error } = await client
+    .from('solicitudes_registro')
+    .select('id_solicitud, email, estado, motivo_rechazo, created_at')
+    .eq('email', email)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+  return data
+}
+
+export async function updateSolicitud(id_solicitud, updates) {
+  const client = getSupabaseClient(true)
+  const { data, error } = await client
+    .from('solicitudes_registro')
+    .update(updates)
+    .eq('id_solicitud', id_solicitud)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+// Alta de usuario reutilizando el hash que ya traía la solicitud
+export async function createUsuarioConHash({ email, password_hash, nombre, rol = 'lector' }) {
+  const client = getSupabaseClient(true)
+  const { data, error } = await client
+    .from('usuarios')
+    .insert({ email, password_hash, nombre, rol })
+    .select('id_usuario, email, nombre, rol, activo, created_at')
+    .single()
+
+  if (error) throw error
+  return data
+}

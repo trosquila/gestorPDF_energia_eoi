@@ -8,6 +8,7 @@ import { analiticaRouter } from '../routes/analitica.js'
 import { usuariosRouter } from '../routes/usuarios_historial.js'
 import { historialRouter } from '../routes/usuarios_historial.js'
 import { clientesRouter } from '../routes/clientes.js'
+import { solicitudesRouter } from '../routes/solicitudes.js'
 
 const app = express()
 
@@ -21,6 +22,7 @@ app.use('/api/analitica', analiticaRouter)
 app.use('/api/usuarios', usuariosRouter)
 app.use('/api/historial', historialRouter)
 app.use('/api/clientes', clientesRouter)
+app.use('/api/solicitudes', solicitudesRouter)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
