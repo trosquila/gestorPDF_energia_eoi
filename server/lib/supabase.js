@@ -158,3 +158,57 @@ export async function getHistorial({ id_usuario, accion, fecha_desde, fecha_hast
   if (error) throw error
   return { data, total: count, limit, offset }
 }
+
+// === CLIENTES ===
+export async function getClientes({ activo, busqueda, limit = 200 } = {}) {
+  const client = getSupabaseClient()
+  let query = client
+    .from('clientes')
+    .select('*')
+    .order('empresa', { ascending: true })
+    .limit(limit)
+
+  if (activo !== undefined) query = query.eq('activo', activo)
+  if (busqueda) query = query.or(`empresa.ilike.%${busqueda}%,nombre.ilike.%${busqueda}%`)
+
+  const { data, error } = await query
+  if (error) throw error
+  return data
+}
+
+export async function getClienteById(id_cliente) {
+  const client = getSupabaseClient()
+  const { data, error } = await client
+    .from('clientes')
+    .select('*')
+    .eq('id_cliente', id_cliente)
+    .maybeSingle()
+
+  if (error) throw error
+  return data
+}
+
+export async function createCliente({ nombre, empresa, email, telefono, direccion_empresa, activo = true }) {
+  const client = getSupabaseClient(true)
+  const { data, error } = await client
+    .from('clientes')
+    .insert({ nombre, empresa, email, telefono, direccion_empresa, activo })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function updateCliente(id_cliente, updates) {
+  const client = getSupabaseClient(true)
+  const { data, error } = await client
+    .from('clientes')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id_cliente', id_cliente)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
