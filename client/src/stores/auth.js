@@ -59,12 +59,10 @@ export const useAuthStore = defineStore('auth', () => {
       const data = await response.json()
       
       if (!response.ok) throw new Error(data.error || 'Error al registrarse')
-      
-      usuario.value = data.data
-      token.value = `Bearer ${data.data.id_usuario}`
-      localStorage.setItem('auth_token', token.value)
-      localStorage.setItem('auth_user', JSON.stringify(data.data))
-      return data.data
+
+      // El registro solo crea una solicitud: no se inicia sesión hasta que
+      // un administrador la apruebe.
+      return data
     } catch (e) {
       error.value = e.message || 'Error al registrarse'
       throw e

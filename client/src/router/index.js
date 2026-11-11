@@ -5,6 +5,7 @@ import DetalleView from '../views/DetalleView.vue'
 import LoteView from '../views/LoteView.vue'
 import AnaliticaView from '../views/AnaliticaView.vue'
 import AuthView from '../views/AuthView.vue'
+import SolicitudesView from '../views/SolicitudesView.vue'
 
 const routes = [
   { path: '/', name: 'Detalle', component: DetalleView, meta: { requiresAuth: true } },
@@ -12,6 +13,8 @@ const routes = [
   { path: '/detalle/:id', name: 'DetalleFactura', component: DetalleView, meta: { requiresAuth: true } },
   { path: '/lote', name: 'Lote', component: LoteView, meta: { requiresAuth: true } },
   { path: '/analitica', name: 'Analitica', component: AnaliticaView, meta: { requiresAuth: true } },
+  // Panel de administración: solo para rol admin
+  { path: '/solicitudes', name: 'Solicitudes', component: SolicitudesView, meta: { requiresAuth: true, requiresAdmin: true } },
   { path: '/login', name: 'Login', component: AuthView, meta: { guestOnly: true } },
   { path: '/register', name: 'Register', component: AuthView, meta: { guestOnly: true } }
 ]
@@ -38,7 +41,14 @@ router.beforeEach(async (to, from, next) => {
     next({ name: 'Login', query: { redirect: to.fullPath } })
     return
   }
-  
+
+  // Rutas de administración
+  const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin)
+  if (requiresAdmin && !authStore.isAdmin) {
+    next({ name: 'Detalle' })
+    return
+  }
+
   if (guestOnly && authStore.isAuthenticated) {
     // Usuario ya logado, redirigir al dashboard
     next({ name: 'Detalle' })

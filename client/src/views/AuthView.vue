@@ -83,6 +83,16 @@
               <p v-if="errors.confirmPassword" class="form-error">{{ errors.confirmPassword }}</p>
             </div>
 
+            <div v-if="solicitudEnviada" class="auth-ok">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              <span>
+                Solicitud enviada. Un administrador debe aprobarla antes de que puedas entrar.
+              </span>
+            </div>
+
             <div v-if="error" class="auth-error">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="10"/>
@@ -146,6 +156,8 @@ const form = ref({
 
 const errors = ref({})
 const error = ref(null)
+// Tras registrarse ya no se entra: queda pendiente de aprobación
+const solicitudEnviada = ref(false)
 const showPassword = ref(false)
 const loading = computed(() => authStore.loading)
 
@@ -208,13 +220,16 @@ async function handleSubmit() {
   try {
     if (isLogin.value) {
       await authStore.login(form.value.email, form.value.password)
+      // Redirigir a la página que intentaba acceder o al dashboard
+      const redirect = route.query.redirect || '/'
+      router.push(redirect)
     } else {
+      // El registro crea una SOLICITUD: no se entra hasta que un admin la apruebe
       await authStore.register(form.value.email, form.value.password, form.value.nombre)
+      solicitudEnviada.value = true
+      error.value = null
+      form.value = { nombre: '', email: '', password: '', confirmPassword: '' }
     }
-    
-    // Redirigir a la página que intentaba acceder o al dashboard
-    const redirect = route.query.redirect || '/'
-    router.push(redirect)
   } catch (e) {
     error.value = e.response?.data?.error || (isLogin.value ? 'Credenciales inválidas' : 'Error al registrarse')
   }
@@ -225,6 +240,7 @@ watch(isLogin, () => {
   form.value = { nombre: '', email: '', password: '', confirmPassword: '' }
   errors.value = {}
   error.value = null
+  solicitudEnviada.value = false
 })
 </script>
 
@@ -321,6 +337,18 @@ watch(isLogin, () => {
   border: 1px solid #fecaca;
   border-radius: var(--radius);
   color: var(--color-error);
+  font-size: 0.875rem;
+}
+
+.auth-ok {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius);
+  color: #15803d;
   font-size: 0.875rem;
 }
 

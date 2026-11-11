@@ -12,6 +12,14 @@
           <router-link to="/" class="nav-link" :class="{ active: isActive('/') }">Detalle</router-link>
           <router-link to="/lote" class="nav-link" :class="{ active: isActive('/lote') }">Lote</router-link>
           <router-link to="/analitica" class="nav-link" :class="{ active: isActive('/analitica') }">Analítica</router-link>
+          <router-link
+            v-if="authStore.isAdmin"
+            to="/solicitudes"
+            class="nav-link"
+            :class="{ active: isActive('/solicitudes') }">
+            Solicitudes
+            <span v-if="pendientes > 0" class="badge-pendientes">{{ pendientes }}</span>
+          </router-link>
           <div class="nav-user">
             <span class="user-name">{{ authStore.userName }}</span>
             <div class="user-menu">
@@ -57,13 +65,26 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
+import { useSolicitudesStore } from './stores/solicitudes'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const solicitudesStore = useSolicitudesStore()
 const showUserMenu = ref(false)
+
+// Contador de solicitudes pendientes (solo se consulta si es admin)
+const pendientes = computed(() => solicitudesStore.solicitudes.filter((s) => s.estado === 'pendiente').length)
+
+function cargarPendientes() {
+  if (!authStore.isAdmin) return
+  solicitudesStore.cargarSolicitudes({ estado: 'pendiente' }).catch(() => {})
+}
+
+onMounted(cargarPendientes)
+watch(() => authStore.isAdmin, (esAdmin) => { if (esAdmin) cargarPendientes() })
 
 const isActive = (path) => router.currentRoute.value.path === path
 
@@ -156,6 +177,20 @@ document.addEventListener('click', (e) => {
 .nav-link.active {
   color: var(--color-primary);
   background-color: #eff6ff;
+}
+
+.badge-pendientes {
+  display: inline-block;
+  margin-left: 0.35rem;
+  min-width: 1.15rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--color-error);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.15rem;
+  text-align: center;
 }
 
 .main {

@@ -82,6 +82,12 @@ export const clientesApi = {
   update: (id, data) => api.patch(`/clientes/${id}`, data)
 }
 
+export const solicitudesApi = {
+  list: (params) => api.get('/solicitudes', { params }),
+  aprobar: (id) => api.post(`/solicitudes/${id}/aprobar`),
+  rechazar: (id, motivo) => api.post(`/solicitudes/${id}/rechazar`, { motivo })
+}
+
 export const historialApi = {
   getByFactura: (idFactura, params) => api.get(`/historial/factura/${idFactura}`, { params }),
   getAll: (params) => api.get('/historial', { params }),
