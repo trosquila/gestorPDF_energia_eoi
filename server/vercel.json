@@ -1,23 +1,19 @@
 {
+  "version": 2,
   "buildCommand": "npm install",
-  "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "node",
   "functions": {
     "api/index.js": {
-      "maxDuration": 30
+      "maxDuration": 60,
+      "memory": 1024,
+      "includeFiles": "node_modules/{@napi-rs,tesseract.js-core,pdfjs-dist}/**"
     }
   },
   "routes": [
     {
-      "src": "/api/(.*)",
+      "src": "/(.*)",
       "dest": "/api/index.js"
     }
-  ],
-  "env": {
-    "SUPABASE_URL": "@supabase-url",
-    "SUPABASE_ANON_KEY": "@supabase-anon-key",
-    "SUPABASE_SERVICE_KEY": "@supabase-service-key",
-    "OPENAI_API_KEY": "@openai-api-key"
-  }
+  ]
 }
