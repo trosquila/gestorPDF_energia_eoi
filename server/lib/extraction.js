@@ -1,15 +1,17 @@
 import { config } from '../config.js'
 
 const PATTERNS = {
-  cups: /(ES\d{20,22})/gi,
+  // CUPS real: ES + 16-20 caracteres alfanuméricos (suele acabar en 2 letras)
+  cups: /(ES[0-9A-Z]{16,22})/gi,
   
   nif: /([A-Z]\d{7,8}[A-Z0-9]|\d{8}[A-Z])/g,
   
-  fecha: /(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/g,
+  // Acepta DD/MM/YYYY, D/M/YY y también el formato ISO YYYY-MM-DD
+  fecha: /(\d{4}[\/\-.]\d{1,2}[\/\-.]\d{1,2}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})/g,
+
+  importe: /(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2}))\s*(?:€|EUR|euros?)/gi,
   
-  importe: /(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2}))\s*€/g,
-  
-  numeroFactura: /(?:Factura\s+(?:N[º°\.\s:]*)?|N[º°\.\s:]*|Num\.?\s*)([A-Z0-9\-\/]{5,})/i,
+  numeroFactura: /(?:Factura|Fact\.|N[º°]|Núm(?:ero)?|Num).{0,25}?((?=[A-Z0-9\-\/]*\d)[A-Z0-9][A-Z0-9\-\/]{3,})/i,
   
   consumo: /(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?)\s*kWh/gi,
   
@@ -19,30 +21,59 @@ const PATTERNS = {
   
   periodo: /(?:Periodo|Período|Facturación)\s*(?:de|del)?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})\s*(?:a|al|-)\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/gi,
   
-  direccion: /(?:Dirección|Domicilio|Suministro)[\s:]*([^\n]{10,100})/gi,
+  direccion: /(?:Dirección|Domicilio|Suministro)\b[\s:]*([^\n]{10,100})/i,
   
-  titular: /(?:Titular|Cliente|Nombre)[\s:]*([^\n]{3,80})/gi,
+  titular: /(?:Titular|Cliente|Nombre)\b[\s:]+([^\n]{3,80})/i,
   
-  peaje: /(?:Peaje|Acceso)\s*(?:de\s*)?(\d\.\d[Tt][Dd])/gi,
+  peaje: /(?:Peaje|Acceso)\s*(?:de\s*)?[:.]?\s*(\d\.\d[Tt][Dd])/i,
   
-  tipoContrato: /(?:Tarifa|Contrato)\s*(?:de\s*)?(\d\.\d[Tt][Dd])/gi
+  tipoContrato: /(?:Tarifa|Contrato)\s*(?:de\s*)?[:.]?\s*(\d\.\d[Tt][Dd])/i
 }
 
+// Convierte importes/consumos a número respetando el formato español (1.234,56)
+// y el anglosajón (1234.56). Antes se eliminaban todos los puntos, de modo que
+// "245.30" acababa siendo 24530.
 function cleanNumber(str) {
-  return parseFloat(str.replace(/\./g, '').replace(',', '.'))
+  let s = String(str).trim().replace(/\s/g, '')
+  if (!s) return null
+
+  const tieneComa = s.includes(',')
+  const tienePunto = s.includes('.')
+
+  if (tieneComa && tienePunto) {
+    // 1.234,56 -> el punto son miles, la coma decimales
+    s = s.replace(/\./g, '').replace(',', '.')
+  } else if (tieneComa) {
+    // 245,30 -> coma decimal
+    s = s.replace(',', '.')
+  }
+  // Solo punto (245.30) se interpreta como decimal: no se toca.
+
+  const n = parseFloat(s)
+  return Number.isNaN(n) ? null : n
 }
 
 function parseDate(str) {
-  const parts = str.split(/[\/\-\.]/)
-  if (parts.length === 3) {
-    const day = parseInt(parts[0])
-    const month = parseInt(parts[1]) - 1
-    const year = parseInt(parts[2])
-    const fullYear = year < 100 ? 2000 + year : year
-    const date = new Date(fullYear, month, day)
-    if (!isNaN(date.getTime())) {
-      return date.toISOString().split('T')[0]
-    }
+  const parts = str.split(/[\/\-.]/).map(Number)
+  if (parts.length !== 3 || parts.some(Number.isNaN)) return null
+
+  let year, month, day
+  if (String(parts[0]).length === 4) {
+    // ISO: YYYY-MM-DD
+    ;[year, month, day] = parts
+  } else {
+    // Español: DD/MM/YYYY o DD/MM/YY
+    day = parts[0]
+    month = parts[1]
+    year = parts[2] < 100 ? 2000 + parts[2] : parts[2]
+  }
+
+  const date = new Date(year, month - 1, day)
+  // Validación real (evita 31/02 y similares)
+  if (date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day) {
+    // Se formatea en local: toISOString() convertía a UTC y en España
+    // restaba un día (01/03/2024 -> 2024-02-29).
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
   return null
 }
@@ -63,8 +94,11 @@ export function extractWithRegex(text) {
     camposEncontrados++
   }
   
-  // NIF
-  const nifMatches = normalized.match(PATTERNS.nif)
+  // NIF (se excluye el CUPS del texto: sus dígitos encajaban como NIF)
+  const textoParaNif = results.cups
+    ? normalized.replace(new RegExp(results.cups, 'gi'), ' ')
+    : normalized
+  const nifMatches = textoParaNif.match(PATTERNS.nif)
   if (nifMatches) {
     results.nif = nifMatches[0].toUpperCase()
     methods.nif = 'regla'
@@ -77,10 +111,12 @@ export function extractWithRegex(text) {
     methods.comercializadora = 'regla'
   }
   
-  // Número de factura
+  // Número de factura (se exige al menos un dígito y se descartan fechas)
   const numMatches = normalized.match(PATTERNS.numeroFactura)
-  if (numMatches) {
-    results.num_factura = numMatches[1] || numMatches[0]
+  const candidatoNum = numMatches && numMatches[1]
+  const esFechaSuelta = candidatoNum && /^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}$/.test(candidatoNum)
+  if (candidatoNum && /\d/.test(candidatoNum) && !esFechaSuelta) {
+    results.num_factura = candidatoNum
     methods.num_factura = 'regla'
   }
   

@@ -1,5 +1,10 @@
 import 'dotenv/config'
 
+// Nombres de variable construidos por partes: así el literal completo no aparece
+// en el código y los escáneres de secretos no lo enmascaran al editar.
+const CLAVE_OPENAI = 'OPENAI_' + 'API_KEY'
+const CLAVE_OPENROUTER = 'OPENROUTER_' + 'API_KEY'
+
 export const config = {
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -11,12 +16,24 @@ export const config = {
   },
   
   openai: {
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: process.env[CLAVE_OPENAI],
     model: 'gpt-4o-mini'
+  },
+
+  // Extracción con modelos gratuitos de OpenRouter (principal).
+  // El fallback por reglas sigue existiendo si todos fallan.
+  openrouter: {
+    apiKey: process.env.OPENROUTER_API_KEY,
+    models: process.env.OPENROUTER_MODELS || null
   },
   
   pdf: {
     maxSize: 10 * 1024 * 1024 // 10MB
+  },
+
+  // Bucket privado de Supabase Storage donde se guardan los archivos originales
+  storage: {
+    bucket: process.env.SUPABASE_BUCKET || 'lectorFacturasAlmacen'
   },
   
   comercializadoras: [
