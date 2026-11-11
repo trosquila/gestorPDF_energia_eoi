@@ -8,16 +8,51 @@ const api = axios.create({
   }
 })
 
+// Request interceptor para añadir token de auth
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('auth_token')
+    if (token) {
+      config.headers.Authorization = token
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
+
+// Response interceptor para manejar errores de auth
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 401) {
+      // Token expirado o inválido
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('auth_user')
+    }
     console.error('API Error:', error.response?.data || error.message)
     return Promise.reject(error)
   }
 )
 
+// Función para actualizar el token dinámicamente
+export function setAuthToken(token) {
+  if (token) {
+    api.defaults.headers.common.Authorization = token
+  } else {
+    delete api.defaults.headers.common.Authorization
+  }
+}
+
+export const authApi = {
+  login: (email, password) => api.post('/usuarios/login', { email, password }),
+  register: (email, password, nombre, rol) => api.post('/usuarios', { email, password, nombre, rol }),
+  changePassword: (email, currentPassword, newPassword) => api.post('/usuarios/change-password', { email, current_password: currentPassword, new_password: newPassword }),
+  getProfile: () => api.get('/usuarios/profile'),
+  listUsuarios: (params) => api.get('/usuarios', { params }),
+  updateUsuario: (id, data) => api.patch(`/usuarios/${id}`, data)
+}
+
 export const facturasApi = {
-  // Subir y procesar PDF
   uploadPdf: (file, onProgress) => {
     const formData = new FormData()
     formData.append('pdf', file)
@@ -26,27 +61,24 @@ export const facturasApi = {
       onUploadProgress: onProgress
     })
   },
-
-  // Obtener factura por ID
   getFactura: (id) => api.get(`/facturas/${id}`),
-
-  // Listar facturas con filtros
   listFacturas: (params) => api.get('/facturas', { params }),
-
-  // Actualizar factura (correcciones manuales)
   updateFactura: (id, data) => api.patch(`/facturas/${id}`, data),
-
-  // Eliminar factura
   deleteFactura: (id) => api.delete(`/facturas/${id}`),
-
-  // Obtener métricas para dashboard
   getMetricas: () => api.get('/facturas/metricas'),
-
-  // Obtener datos para analítica
   getAnalitica: (params) => api.get('/analitica', { params }),
-
-  // Obtener facturas de ejemplo (dataset IDSEM)
   getEjemplos: () => api.get('/ejemplos')
+}
+
+export const historialApi = {
+  getByFactura: (idFactura, params) => api.get(`/historial/factura/${idFactura}`, { params }),
+  getAll: (params) => api.get('/historial', { params }),
+  create: (data) => api.post('/historial', data)
+}
+
+export const usuariosApi = {
+  list: (params) => api.get('/usuarios', { params }),
+  update: (id, data) => api.patch(`/usuarios/${id}`, data)
 }
 
 export default api

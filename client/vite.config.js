@@ -15,5 +15,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true
-  }
+  },
+  // Asegurar que las variables empiezen con VITE_ están disponibles
+  envPrefix: ['VITE_']
 })

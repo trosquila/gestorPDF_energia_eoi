@@ -9,13 +9,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "vue": "^3.4.31",
-    "vue-router": "^4.4.0",
-    "pinia": "^2.1.7",
     "axios": "^1.7.2",
     "chart.js": "^4.4.3",
+    "date-fns": "^3.6.0",
+    "pinia": "^2.1.7",
+    "supabase": "^3.1.0",
+    "vue": "^3.4.31",
     "vue-chartjs": "^5.3.1",
-    "date-fns": "^3.6.0"
+    "vue-router": "^4.4.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.5",
