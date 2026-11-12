@@ -2,14 +2,16 @@ import express from 'express'
 import { getSupabaseClient, getClienteById } from '../lib/supabase.js'
 import { preciosDelDia, mediaPorPeriodo2_0TD } from '../lib/precios.js'
 import { consultarAsistente } from '../lib/asistente.js'
+import {
+  costeDeOferta,
+  mapaPeriodos,
+  aNumero as numero,
+  redondear,
+  IMPUESTO_ELECTRICO,
+  IVA
+} from '../lib/coste.js'
 
 const router = express.Router()
-
-// Impuestos de la factura eléctrica en España
-const IMPUESTO_ELECTRICO = 0.0511 // 5,11 % sobre potencia + energía
-const IVA = 0.21                 // 21 % sobre el subtotal con impuesto
-
-const PERIODOS = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6']
 
 /** ¿La tabla del catálogo existe ya? (falta ejecutar sql/12_ofertas.sql) */
 function faltaTablaOfertas(error) {
@@ -18,67 +20,6 @@ function faltaTablaOfertas(error) {
     error?.code === 'PGRST205' ||
     /relation .*ofertas.* does not exist/i.test(mensaje) ||
     /Could not find the table .*ofertas/i.test(mensaje)
-}
-
-function numero(valor, defecto = 0) {
-  const n = typeof valor === 'number' ? valor : Number(String(valor ?? '').replace(',', '.'))
-  return Number.isFinite(n) ? n : defecto
-}
-
-/** Normaliza los mapas por periodo que llegan del cliente. */
-function mapaPeriodos(valor) {
-  const salida = {}
-  if (!valor || typeof valor !== 'object') return salida
-  for (const [periodo, cantidad] of Object.entries(valor)) {
-    const clave = String(periodo).toUpperCase()
-    if (!PERIODOS.includes(clave)) continue
-    const n = numero(cantidad, null)
-    if (n === null || n < 0) continue
-    salida[clave] = n
-  }
-  return salida
-}
-
-/**
- * Coste anual estimado de una oferta con un perfil de consumo.
- * potencias en kW · consumos en kWh · precios en €/kWh y €/kW/año
- */
-function costeDeOferta(oferta, perfil) {
-  const dias = perfil.dias || 365
-  const fraccion = dias / 365
-
-  let potencia = 0
-  for (const [periodo, kw] of Object.entries(perfil.potencias)) {
-    potencia += kw * numero(oferta.precio_potencia?.[periodo])
-  }
-  potencia *= fraccion
-
-  let energia = 0
-  for (const [periodo, kwh] of Object.entries(perfil.consumos)) {
-    energia += kwh * numero(oferta.precio_energia?.[periodo])
-  }
-
-  const excedentes = numero(oferta.precio_excedentes) * Math.min(perfil.excedentes_kwh, perfil.consumo_total)
-  const alquiler = numero(oferta.alquiler_contador) * (dias / 30.44)
-
-  const subtotal = Math.max(0, potencia + energia - excedentes + alquiler)
-  const impuesto = subtotal * IMPUESTO_ELECTRICO
-  const iva = (subtotal + impuesto) * IVA
-  const total = subtotal + impuesto + iva
-
-  return {
-    potencia: redondear(potencia),
-    energia: redondear(energia),
-    excedentes: redondear(excedentes),
-    alquiler: redondear(alquiler),
-    impuesto: redondear(impuesto),
-    iva: redondear(iva),
-    total: redondear(total)
-  }
-}
-
-function redondear(valor) {
-  return Number(valor.toFixed(2))
 }
 
 /** Estimación del PVPC: solo energía, a precio medio de los últimos 30 días. */

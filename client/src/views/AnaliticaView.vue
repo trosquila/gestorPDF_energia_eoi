@@ -18,9 +18,14 @@
       <button class="tab" :class="{ active: tabActiva === 'alertas' }" @click="tabActiva = 'alertas'">
         Alertas
       </button>
+      <button class="tab" :class="{ active: tabActiva === 'energia' }" @click="tabActiva = 'energia'">
+        Energía y potencia
+      </button>
     </div>
 
-    <div v-if="loading" class="loading-state">
+    <EnergiaPanel v-if="tabActiva === 'energia'" />
+
+    <div v-else-if="loading" class="loading-state">
       <div class="spinner"></div>
       <p>Cargando datos analíticos...</p>
     </div>
@@ -112,6 +117,7 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useFacturasStore } from '../stores/facturas'
 import Chart from 'chart.js/auto'
+import EnergiaPanel from '../components/analitica/EnergiaPanel.vue'
 
 const store = useFacturasStore()
 
