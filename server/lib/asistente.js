@@ -35,16 +35,22 @@ function numerosDe(texto) {
 
 /**
  * Comprueba que cada cifra de la respuesta exista en los datos.
+ * Los porcentajes se ignoran: son derivados (un 51 % sale del ahorro), no
+ * precios inventados.
  * @returns {{ valido: boolean, inventadas: string[] }}
  */
 export function validarCifras(respuesta, datos) {
   const permitidos = numerosDe(JSON.stringify(datos))
   const inventadas = []
+  const texto = String(respuesta)
 
-  // Se revisan solo importes con decimales: años, periodos y kWh enteros se
-  // citan sin problema y no aportan riesgo.
-  for (const cifra of numerosDe(respuesta)) {
+  for (const coincidencia of texto.matchAll(/\d+(?:[.,]\d+)?/g)) {
+    const cifra = coincidencia[0].replace(',', '.')
     if (!cifra.includes('.')) continue
+
+    const siguiente = texto.slice(coincidencia.index + coincidencia[0].length).trimStart()[0]
+    if (siguiente === '%') continue
+
     if (permitidos.has(cifra)) continue
     // Tolerancia de redondeo: 12.3 y 12.34 son la misma cifra
     const cercana = [...permitidos].some((p) => {
