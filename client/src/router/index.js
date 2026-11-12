@@ -10,6 +10,7 @@ const LoteView = () => import('../views/LoteView.vue')
 const AnaliticaView = () => import('../views/AnaliticaView.vue')
 const AuthView = () => import('../views/AuthView.vue')
 const SolicitudesView = () => import('../views/SolicitudesView.vue')
+const ClientesView = () => import('../views/ClientesView.vue')
 
 const routes = [
   // Subir una factura nueva
@@ -20,6 +21,8 @@ const routes = [
   { path: '/lote/:id', name: 'FacturaLote', component: FacturaLoteView, meta: { requiresAuth: true } },
   { path: '/lote', name: 'Lote', component: LoteView, meta: { requiresAuth: true } },
   { path: '/analitica', name: 'Analitica', component: AnaliticaView, meta: { requiresAuth: true } },
+  // Gestión de clientes: solo administradores
+  { path: '/clientes', name: 'Clientes', component: ClientesView, meta: { requiresAuth: true, requiresAdmin: true } },
   // Panel de administración: solo para rol admin
   { path: '/solicitudes', name: 'Solicitudes', component: SolicitudesView, meta: { requiresAuth: true, requiresAdmin: true } },
   { path: '/login', name: 'Login', component: AuthView, meta: { guestOnly: true } },

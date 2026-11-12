@@ -57,6 +57,21 @@ export const useClientesStore = defineStore('clientes', () => {
     }
   }
 
+  async function eliminarCliente(id) {
+    error.value = null
+    try {
+      const response = await clientesApi.remove(id)
+      const cliente = response.data.data || response.data
+      const idx = clientes.value.findIndex((c) => c.id_cliente === id)
+      if (idx !== -1) clientes.value[idx] = cliente
+      return { cliente, aviso: response.data.aviso || null }
+    } catch (e) {
+      const detalle = e.response?.data?.error || e.message
+      error.value = detalle
+      throw new Error(detalle)
+    }
+  }
+
   return {
     clientes,
     clientesActivos,
@@ -64,6 +79,7 @@ export const useClientesStore = defineStore('clientes', () => {
     error,
     cargarClientes,
     crearCliente,
-    actualizarCliente
+    actualizarCliente,
+    eliminarCliente
   }
 })

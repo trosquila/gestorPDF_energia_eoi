@@ -14,6 +14,11 @@
           <router-link to="/analitica" class="nav-link" :class="{ active: isActive('/analitica') }">Analítica</router-link>
           <router-link
             v-if="authStore.isAdmin"
+            to="/clientes"
+            class="nav-link"
+            :class="{ active: isActive('/clientes') }">Clientes</router-link>
+          <router-link
+            v-if="authStore.isAdmin"
             to="/solicitudes"
             class="nav-link"
             :class="{ active: isActive('/solicitudes') }">
@@ -161,10 +166,18 @@ document.addEventListener('click', (e) => {
 .nav {
   display: flex;
   gap: 0.5rem;
+  /* En pantallas estrechas se desplaza en horizontal en vez de partir el texto */
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.nav::-webkit-scrollbar {
+  height: 4px;
 }
 
 .nav-link {
   padding: 0.5rem 1rem;
+  white-space: nowrap;
   border-radius: var(--radius);
   font-weight: 500;
   color: var(--color-text-muted);
