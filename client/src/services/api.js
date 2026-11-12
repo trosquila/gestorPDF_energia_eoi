@@ -67,7 +67,7 @@ export const facturasApi = {
   deleteFactura: (id) => api.delete(`/facturas/${id}`),
   getMetricas: () => api.get('/facturas/metricas'),
   getAnalitica: (params) => api.get('/analitica', { params }),
-  analiticaEnergia: () => api.get('/analitica/energia'),
+  analiticaEnergia: (params) => api.get('/analitica/energia', { params }),
   asignarCliente: (id, id_cliente) => api.patch(`/facturas/${id}/cliente`, { id_cliente }),
   // Alta manual de rescate: archivo + datos escritos a mano
   crearFacturaManual: (formData, onProgress) => api.post('/facturas/manual', formData, {

@@ -183,12 +183,33 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { facturasApi } from '../../services/api'
+
+const props = defineProps({
+  // Mismos filtros que la vista (fechas, comercializadora, provincia, cliente)
+  filtros: { type: Object, default: () => ({}) }
+})
 
 const datos = ref(null)
 const cargando = ref(true)
 const error = ref(null)
+
+async function cargar() {
+  cargando.value = true
+  error.value = null
+  try {
+    const r = await facturasApi.analiticaEnergia(props.filtros)
+    datos.value = r.data.data || r.data
+  } catch (e) {
+    error.value = 'No se pudo cargar la analítica de energía: ' +
+      (e.response?.data?.error || e.message)
+  } finally {
+    cargando.value = false
+  }
+}
+
+watch(() => props.filtros, cargar, { deep: true })
 
 function formatoNumero(valor) {
   return Number(valor || 0).toLocaleString('es-ES', { maximumFractionDigits: 1 })
@@ -207,17 +228,7 @@ function clasePeriodo(periodo) {
   return { P1: 'p1', P2: 'p2', P3: 'p3' }[periodo] || 'p3'
 }
 
-onMounted(async () => {
-  try {
-    const r = await facturasApi.analiticaEnergia()
-    datos.value = r.data.data || r.data
-  } catch (e) {
-    error.value = 'No se pudo cargar la analítica de energía: ' +
-      (e.response?.data?.error || e.message)
-  } finally {
-    cargando.value = false
-  }
-})
+onMounted(cargar)
 </script>
 
 <style scoped>
