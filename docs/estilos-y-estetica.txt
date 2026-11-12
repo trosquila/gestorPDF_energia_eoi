@@ -188,11 +188,28 @@
     inputs apilados, botón primario a ancho completo, enlace al modo contrario
     (¿No tienes cuenta? Regístrate). Aviso de solicitud pendiente en tono info.
 
-  DetalleView (subida y edición)  ·  1.162 líneas
-    Es la vista más densa: drop-zone grande, previsualización del archivo,
-    bloque de extracción con badges de confianza y etiquetas por campo,
-    rejilla de campos (2 columnas), tabla de líneas, selector de cliente,
-    barra de guardado al pie. Usa .img-preview con object-fit: contain.
+  SubidaView (subir factura)  ·  ~250 líneas
+    Pantalla única de captura: drop-zone grande, overlay de progreso durante
+    OCR/IA y, si la lectura falla, formulario vacío de rescate con la imagen.
+    Al terminar navega a /factura/:id (pide los datos al backend, no del store).
+
+  FacturaView (/factura/:id)  ·  ~250 líneas
+    Ficha de una factura: cabecera con número, comercializadora, fecha, importe
+    y badges de estado/confianza; visor del archivo a la izquierda y editor de
+    campos a la derecha. Carga con esqueleto y permite reintentar si falla.
+
+  FacturaLoteView (/lote/:id)  ·  ~300 líneas
+    La misma ficha dentro del flujo del lote: botón "Volver al lote", posición
+    «3 de 12», anterior/siguiente (también con las flechas del teclado) y aviso
+    si intentas cambiar de factura con cambios sin guardar.
+
+  Componentes compartidos (antes todo vivía en una vista de 1.162 líneas):
+    components/factura/EditorFactura.vue   campos, líneas, cliente, guardar,
+                                           modales de alta de cliente y de salida
+    components/factura/VisorArchivo.vue    PDF o imagen con esqueleto de carga
+    components/factura/BadgesFactura.vue   estado, método y % de confianza
+    components/factura/ModalCliente.vue    alta y edición de cliente
+    utils/factura.js                       detección de imagen y URL del visor
 
   LoteView (listado)  ·  381 líneas
     Tarjeta con cabecera y tabla: nº factura, fechas, comercializadora, importe,

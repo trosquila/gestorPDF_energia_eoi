@@ -245,7 +245,7 @@ function limpiarFiltros() {
 }
 
 function verDetalle(id) {
-  router.push(`/detalle/${id}`)
+  router.push(`/lote/${id}`)
 }
 
 // === Eliminar (borrado lógico) ===

@@ -9,8 +9,8 @@
           <span>Control Energía</span>
         </router-link>
         <nav class="nav" v-if="authStore.isAuthenticated">
-          <router-link to="/" class="nav-link" :class="{ active: isActive('/') }">Detalle</router-link>
-          <router-link to="/lote" class="nav-link" :class="{ active: isActive('/lote') }">Lote</router-link>
+          <router-link to="/" class="nav-link" :class="{ active: isActive('/') }">Subir factura</router-link>
+          <router-link to="/lote" class="nav-link" :class="{ active: esZonaLote }">Lote</router-link>
           <router-link to="/analitica" class="nav-link" :class="{ active: isActive('/analitica') }">Analítica</router-link>
           <router-link
             v-if="authStore.isAdmin"
@@ -87,6 +87,8 @@ onMounted(cargarPendientes)
 watch(() => authStore.isAdmin, (esAdmin) => { if (esAdmin) cargarPendientes() })
 
 const isActive = (path) => router.currentRoute.value.path === path
+// "Lote" queda activo también dentro de la ficha abierta desde el lote
+const esZonaLote = computed(() => router.currentRoute.value.path.startsWith('/lote'))
 
 const roleBadgeClass = computed(() => {
   const role = authStore.usuario?.rol
@@ -142,6 +144,7 @@ document.addEventListener('click', (e) => {
   align-items: center;
   gap: 0.625rem;
   font-weight: 700;
+  white-space: nowrap;
   font-size: 1.125rem;
   color: var(--color-primary);
   text-decoration: none;
