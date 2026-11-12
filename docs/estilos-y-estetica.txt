@@ -1,0 +1,321 @@
+================================================================================
+  CONTROL ENERGÍA  ·  GUÍA DE ESTILOS Y ESTÉTICA
+  Documento de referencia para modificar y mejorar el aspecto de la aplicación.
+  Extraído del código real (client/src) el 12/11/2026 · v1.0
+================================================================================
+
+  CÓMO USAR ESTE ARCHIVO
+  - La sección 2 (tokens) es el único sitio donde deberías cambiar los colores base.
+  - La sección 10 (recetas) trae los cambios más habituales, paso a paso.
+  - La sección 9 (deuda técnica) lista lo que está hardcodeado: si tocas ahí, hazlo
+    con cuidado porque son valores repetidos en varias vistas.
+
+
+================================================================================
+1. RESUMEN EN DIEZ LÍNEAS
+================================================================================
+
+  Estética: panel administrativo limpio, tipo SaaS, sin adornos.
+  Fondo claro (#f8fafc) con tarjetas blancas elevadas sutilmente.
+  Un único color de marca: azul #1e40af (royal blue), hover #1d4ed8.
+  Tipografía: Inter, cuerpo 1rem, etiquetas 0.875rem, metadatos 0.75rem.
+  Radios pequeños (8px) y sombras casi imperceptibles: aspecto sobrio, no "burbuja".
+  Densidad media: filas de tabla de 0.75rem de padding, tarjetas de 1.25rem.
+  Semántica de color fija: verde éxito, ámbar aviso, rojo error, azul info.
+  Barra superior sticky de 64px con logo, navegación y menú de usuario.
+  Sin modo oscuro, sin animaciones largas (todas de 0.15s o menos).
+  Iconografía: SVG en línea (logo) y emoji ocasional; no hay librería de iconos.
+
+
+================================================================================
+2. TOKENS  ·  client/src/style.css  (:root)
+================================================================================
+
+  VARIABLE                VALOR                DÓNDE SE USA
+  ----------------------------------------------------------------------------
+  --color-primary         #1e40af   azul       botones primarios, enlaces, activo
+  --color-primary-light   #3b82f6   azul claro (declarado, apenas usado)
+  --color-success         #059669   verde      progreso correcto, confianza alta
+  --color-warning         #d97706   ámbar      avisos, confianza media
+  --color-error           #dc2626   rojo       errores, borrar, confianza baja
+  --color-bg              #f8fafc   gris azul  fondo de página, hover de fila
+  --color-surface         #ffffff   blanco     tarjetas, cabecera, inputs
+  --color-border          #e2e8f0   gris       bordes, separadores, inputs
+  --color-text            #1e293b   casi negro texto principal
+  --color-text-muted      #64748b   gris       etiquetas, columnas, secundario
+  --radius                8px                  todos los radios base
+  --shadow                0 1px 3px rgba(0,0,0,.10)    tarjetas
+  --shadow-lg             0 4px 6px rgba(0,0,0,.10)    (declarado, poco usado)
+  --font-family           Inter, -apple-system, BlinkMacSystemFont, Segoe UI,
+                          Roboto, sans-serif
+
+  Paleta derivada que existe pero NO está en tokens (copiada a mano):
+  #1d4ed8  hover del botón primario
+  #b91c1c  hover del botón peligro (repetido 5 veces en vistas)
+  #eff6ff  fondo de drop-zone activa / resaltados azules suaves
+  #dcfce7 #166534   badge verde
+  #fef3c7 #92400e   badge ámbar
+  #fee2e2 #991b1b   badge rojo
+  #dbeafe #1e40af   badge azul
+  #fef2f2 #fecaca   aviso de error suave
+  #f0fdf4 #15803d   aviso de éxito suave
+  #f59e0b #ea580c   acentos puntuales en analítica
+
+
+================================================================================
+3. TIPOGRAFÍA
+================================================================================
+
+  Familia: 'Inter' (cargada del sistema, sin @font-face ni CDN).
+  line-height base: 1.6 en body.
+
+  ESCALA REAL USADA (rem)          USO
+  ----------------------------------------------------------------------------
+  2         (32px)   valor de métrica grande (.metric-value, peso 700)
+  1.75      (28px)   título de página (h1) en varias vistas
+  1.5       (24px)   título de sección
+  1.25      (20px)   títulos de tarjeta
+  1.15 / 1.125       subtítulos, énfasis
+  1         (16px)   cuerpo, inputs (por herencia)
+  0.9 / 0.85         texto de apoyo en tarjetas
+  0.875     (14px)   etiquetas de formulario, botones, celdas destacadas
+  0.8125    (13px)   celdas de tabla, metadatos
+  0.78 / 0.75 (12px) badges, cabeceras de columna, notas al pie
+  0.7       (11px)   etiqueta de método de extracción (.field-method)
+
+  Pesos: 500 (labels, botones, nav), 600 (cabeceras de tabla), 700 (logo,
+  títulos y valores de métrica).
+
+  REGLA PRÁCTICA: si necesitas un tamaño nuevo, usa uno de los de la lista.
+  Los tamaños 0.78 / 0.85 / 0.9 / 1.15 existen por decisiones puntuales y son
+  los candidatos a unificarse en la próxima limpieza.
+
+
+================================================================================
+4. ESPACIADO Y GEOMETRÍA
+================================================================================
+
+  Contenedor:   max-width 1200px, padding lateral 1rem, centrado.
+  Cabecera:     altura fija 64px, sticky, borde inferior de 1px.
+  Tarjeta:      padding 1.25rem (.card-body), cabecera 1rem 1.25rem.
+  Tabla:        celdas 0.75rem 1rem, cabecera en mayúsculas 0.75rem, letter-spacing .05em.
+  Formulario:   grupo con 1rem de separación, label con 0.375rem, input 0.625rem 0.875rem.
+  Botón:        padding 0.625rem 1.25rem, gap 0.5rem, radio 8px, fuente 0.875rem.
+  Badge:        padding 0.25rem 0.625rem, radio 9999px (píldora), fuente 0.75rem.
+
+  RADIOS:   3px (barras de progreso) · 4px (etiquetas de método) · 6px (controles
+            pequeños) · 8px (base, --radius) · 12px (tarjetas destacadas) · 999px (badges).
+  SOMBRAS:  --shadow para tarjetas. No hay sombras fuertes en ninguna vista:
+            la jerarquía se hace con borde + fondo, no con profundidad.
+
+  ANIMACIONES: 0.15s ease en hover de botones, enlaces y tabs; 0.3s solo en el
+  ancho de las barras de progreso. Ninguna transición de página.
+
+
+================================================================================
+5. COMPONENTES GLOBALES  ·  definidos en style.css
+================================================================================
+
+  BOTONES  (.btn + variante)
+    .btn              base: inline-flex, centrado, gap 0.5rem, 0.875rem, peso 500
+    .btn-primary      fondo #1e40af, texto blanco, hover #1d4ed8
+    .btn-secondary    blanco, borde, texto normal, hover fondo --color-bg
+    .btn-success      verde #059669
+    .btn-danger       rojo #dc2626, hover #b91c1c
+    .btn-warning      ámbar #d97706
+    .btn-error        alias de .btn-danger
+    .btn:disabled     opacidad 0.5, cursor not-allowed
+    (En App.vue existe además .btn-sm, no definido en style.css.)
+
+  TARJETA
+    .card             blanco, radio 8px, borde, sombra suave
+    .card-header      flex con space-between, borde inferior
+    .card-body        padding 1.25rem
+
+  BADGES (estado)
+    .badge            píldora, 0.75rem, peso 500
+    .badge-success     verde (#166534 sobre #dcfce7)
+    .badge-warning     ámbar (#92400e sobre #fef3c7)
+    .badge-error       rojo  (#991b1b sobre #fee2e2)
+    .badge-info        azul  (#1e40af sobre #dbeafe)
+
+  FORMULARIO
+    .form-group       margen inferior 1rem
+    .form-label       bloque, peso 500, 0.875rem
+    .form-input       ancho total, borde, radio 8px, foco azul con halo
+                      box-shadow 0 0 0 3px rgba(30,64,175,.15)
+    .form-input:disabled  fondo gris, texto apagado
+
+  TABLA
+    table             ancho 100%, border-collapse
+    th                mayúsculas, 0.75rem, gris, fondo --color-bg
+    td                padding 0.75rem 1rem, borde inferior
+    tr:hover td       fondo --color-bg
+    .table-container  scroll horizontal en pantallas pequeñas
+
+  OTROS
+    .tabs / .tab(.active)      pestañas con subrayado azul de 2px
+    .drop-zone(.active)        borde discontinuo 2px, padding 3rem, hover azul suave
+    .progress-bar / .progress-fill(.success|.warning|.error)   6px de alto
+    .metric-card / .metric-value / .metric-label      tarjetas de cifra grande
+    .field-method(.rule|.llm|.mixed)   etiqueta de origen del dato (verde/ámbar/azul)
+    .confidence-circle(.high|.medium|.low)   círculo 24px con % de confianza
+
+
+================================================================================
+6. LAYOUT  ·  client/src/App.vue
+================================================================================
+
+  .app            columna flex, min-height 100vh
+  .header         sticky top 0, blanco, borde inferior, z-index alto
+  .header-content flex, altura 64px, logo a la izquierda, resto a la derecha
+  .logo           SVG del icono en color primario + texto en peso 700
+  .nav            enlaces: Detalle · Lote · Analítica · [Solicitudes, solo admin]
+  .nav-link       padding 0.5rem 1rem, gris; hover fondo gris; .active azul
+  .badge-pendientes  contador rojo (var(--color-error), píldora 0.7rem) sobre "Solicitudes"
+  .nav-user       nombre + desplegable de usuario
+  .user-dropdown  tarjeta flotante: email, badge de rol, separador,
+                  cambiar contraseña, cerrar sesión (en rojo)
+  .main           padding vertical del contenido, dentro de .container
+
+
+================================================================================
+7. VISTA POR VISTA
+================================================================================
+
+  AuthView (login/registro)  ·  404 líneas
+    Tarjeta centrada sobre fondo gris. Título grande, subtítulo apagado,
+    inputs apilados, botón primario a ancho completo, enlace al modo contrario
+    (¿No tienes cuenta? Regístrate). Aviso de solicitud pendiente en tono info.
+
+  DetalleView (subida y edición)  ·  1.162 líneas
+    Es la vista más densa: drop-zone grande, previsualización del archivo,
+    bloque de extracción con badges de confianza y etiquetas por campo,
+    rejilla de campos (2 columnas), tabla de líneas, selector de cliente,
+    barra de guardado al pie. Usa .img-preview con object-fit: contain.
+
+  LoteView (listado)  ·  381 líneas
+    Tarjeta con cabecera y tabla: nº factura, fechas, comercializadora, importe,
+    estado y columna de acciones (Ver / Eliminar). Modal de confirmación de baja.
+
+  AnaliticaView (métricas)  ·  456 líneas
+    Rejilla de .metric-card, gráficos de barras hechos con divs y colores
+    semánticos (#f59e0b, #ea580c), tabla de resumen. Sin librería de gráficos.
+
+  SolicitudesView (admin)  ·  338 líneas
+    Igual que LoteView: tabla con filtros por estado (pendientes/aprobadas/
+    rechazadas), acciones aprobar/rechazar y modal con motivo.
+
+  PATRÓN COMÚN: tarjeta + cabecera con título y acción a la derecha, tabla o
+  rejilla de campos dentro, mensajes de estado justo encima de la tabla.
+
+
+================================================================================
+8. ESTADOS, MENSAJES Y MODALES
+================================================================================
+
+  Éxito      verde: texto "✓ ..." o caja #f0fdf4 con borde #15803d
+  Aviso      ámbar: caja #fef3c7, texto #92400e
+  Error      rojo: caja #fef2f2 con borde #fecaca y texto #b91c1c
+  Carga      texto apagado "Cargando…" o skeleton de bloques grises
+  Vacío      texto apagado centrado, nunca una tabla vacía sin explicación
+  Modales    overlay semitransparente, tarjeta blanca centrada, dos botones:
+             secundario (cancelar) y peligro (confirmar).
+  Confirmación destructiva siempre con modal, nunca con window.confirm
+  (excepción heredada: algún alert() puntual, a eliminar).
+
+
+================================================================================
+9. DEUDA TÉCNICA VISUAL  (lo que conviene unificar)
+================================================================================
+
+  1. Colores fuera de tokens, repetidos en las vistas:
+     #b91c1c (5), #1e40af (4), #15803d (2), #111 (2), #eff6ff, #f0fdf4,
+     #fef2f2, #fecaca, #fef3c7, #f59e0b, #ea580c, #e2e8f0, #f8fafc.
+     → mover a tokens (--color-primary-hover, --color-danger-hover,
+       --color-info-bg, --color-success-bg) y sustituir.
+
+  2. Escala tipográfica con valores ad hoc (0.78 / 0.85 / 0.9 / 1.15) que no
+     aportan jerarquía real.
+     → quedarse con 0.75 / 0.8125 / 0.875 / 1 / 1.25 / 1.5 / 1.75 / 2.
+
+  3. Foco visible solo en .form-input. Los botones (<button>) no tienen estado
+     :focus-visible: con teclado no se ve dónde estás.
+     → añadir :focus-visible con el mismo halo azul.
+
+  4. .btn-danger y .btn-error son el mismo estilo declarado dos veces.
+  5. .btn-sm existe en App.vue pero no en style.css (debería ser global).
+  6. Radios mezclados (3/4/6/8/12) sin criterio escrito.
+  7. `.drop-zone` es clicable y además contiene un botón clicable: genera el
+     doble diálogo de archivo que ya dio problemas.
+  8. No hay modo oscuro ni tokens de tema; todo apunta a claro.
+  9. La cabecera no colapsa en móvil: la navegación se sale en pantallas
+     estrechas (< 720px).
+
+
+================================================================================
+10. RECETAS
+================================================================================
+
+  A) CAMBIAR EL COLOR DE MARCA
+     1. En style.css cambia --color-primary y --color-primary-light.
+     2. Cambia el hover .btn-primary (#1d4ed8) — está hardcodeado.
+     3. Cambia el halo de foco rgba(30,64,175,.15) para que case.
+     4. Busca #1e40af en las vistas (4 apariciones) y sustitúyelas por el token.
+     5. Recalcula contraste: texto blanco sobre el nuevo primario debe dar >= 4.5:1.
+
+  B) MODO OSCURO (no existe; así se haría)
+     1. Envolver los tokens en :root[data-theme="dark"] con los mismos nombres.
+     2. Sustituir los hex de las vistas por tokens (sección 9.1), o el modo oscuro
+        quedará a parches.
+     3. Los badges necesitan pareja oscura propia (hoy son pasteles claros).
+     4. Guardar la preferencia en localStorage y aplicarla con data-theme en <html>.
+
+  C) DENSIFICAR TABLAS
+     th, td { padding: 0.5rem 0.75rem } y bajar td a 0.8125rem.
+
+  D) AÑADIR UNA VISTA NUEVA (consistente con el resto)
+     1. <router-link> en .nav de App.vue.
+     2. Patrón: <div class="card"><div class="card-header">título + acción</div>
+        <div class="card-body">contenido</div></div>.
+     3. Mensajes con las cajas de la sección 8; estados con .badge.
+     4. Estilos propios en <style scoped>, sin duplicar lo que ya está en style.css.
+
+  E) SUBIR EL NIVEL VISUAL SIN ROMPER NADA (mi recomendación)
+     1. Tokens de hover/foco y limpieza de hex (sección 9.1) — base para todo lo demás.
+     2. :focus-visible en todos los interactivos.
+     3. Navegación responsive (menú hamburguesa por debajo de 720px).
+     4. Skeleton real en carga de tablas y visor (hoy es texto "Cargando…").
+     5. Sustituir los gráficos de divs de Analítica por SVG propio (sin librería).
+     Nada de esto cambia la estructura: mismo aspecto, más sólido.
+
+
+================================================================================
+11. ACCESIBILIDAD  (contrastes calculados, no estimados)
+================================================================================
+
+  PAR                          RATIO     VEREDICTO
+  ----------------------------------------------------------------------------
+  #1e40af sobre #ffffff        8.72:1    OK AA
+  blanco sobre #1e40af         8.72:1    OK AA (botón primario)
+  #1e293b sobre #f8fafc       13.98:1    OK AAA
+  #64748b sobre #f8fafc        4.55:1    OK AA justo (no bajar más el gris)
+  #dc2626 sobre #ffffff        4.83:1    OK AA
+  #d97706 sobre #ffffff        3.19:1    SOLO texto grande / no usar para texto pequeño
+  #059669 sobre #ffffff        3.77:1    SOLO texto grande / no usar para texto pequeño
+  #92400e sobre #fef3c7        6.37:1    OK AA (badge warning)
+  #166534 sobre #dcfce7        6.49:1    OK AA (badge success)
+  #991b1b sobre #fee2e2        6.80:1    OK AA (badge error)
+  #1e40af sobre #dbeafe        7.15:1    OK AA (badge info)
+
+  CONCLUSIÓN: los textos principales cumplen. Los dos que fallan para texto
+  pequeño son el verde y el ámbar usados como texto sobre blanco: úsalos como
+  fondo o con una versión más oscura.
+
+  PENDIENTE: foco de teclado en botones (sección 9.3) y tamaño de objetivo
+  táctil (varios botones pequeños están por debajo de 44px de alto).
+
+================================================================================
+  FIN · Este archivo se actualiza a mano. Si cambias los tokens en style.css,
+  revisa las secciones 2, 10 y 11.
+================================================================================
