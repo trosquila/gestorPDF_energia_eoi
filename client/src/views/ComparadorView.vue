@@ -231,9 +231,15 @@
     <div class="card">
       <div class="card-header">
         <h3>Catálogo de ofertas ({{ comparador.ofertas.length }})</h3>
-        <button class="btn btn-secondary btn-sm" @click="mostrarFormulario = !mostrarFormulario">
-          {{ mostrarFormulario ? 'Cerrar' : '+ Añadir oferta' }}
-        </button>
+        <div class="cabecera-catalogo">
+          <input ref="inputCsv" type="file" accept=".csv,text/csv" class="oculto" @change="importarCsv" />
+          <button class="btn btn-secondary btn-sm" @click="inputCsv?.click()" :disabled="importando">
+            {{ importando ? 'Importando…' : 'Importar CSV' }}
+          </button>
+          <button class="btn btn-secondary btn-sm" @click="mostrarFormulario = !mostrarFormulario">
+            {{ mostrarFormulario ? 'Cerrar' : '+ Añadir oferta' }}
+          </button>
+        </div>
       </div>
 
       <div class="card-body" v-if="mostrarFormulario">
@@ -282,6 +288,11 @@
         </div>
       </div>
 
+      <div class="card-body" v-if="resumenImportacion || errorOferta">
+        <p v-if="resumenImportacion" class="resumen-importacion">{{ resumenImportacion }}</p>
+        <p v-if="errorOferta" class="aviso-error">{{ errorOferta }}</p>
+      </div>
+
       <div class="card-body" v-if="comparador.ofertas.length > 0">
         <div class="table-container">
           <table>
@@ -324,6 +335,9 @@ const preguntando = ref(false)
 const mostrarFormulario = ref(false)
 const guardandoOferta = ref(false)
 const errorOferta = ref(null)
+const inputCsv = ref(null)
+const importando = ref(false)
+const resumenImportacion = ref(null)
 
 const periodos = computed(() => (
   perfil.value.peaje === '2.0TD' ? ['P1', 'P2', 'P3'] : ['P1', 'P2', 'P3', 'P4', 'P5', 'P6']
@@ -447,6 +461,72 @@ async function guardarOferta() {
     errorOferta.value = e.response?.data?.error || e.message
   } finally {
     guardandoOferta.value = false
+  }
+}
+
+/**
+ * Importa ofertas desde CSV separado por ; o ,
+ * Cabecera: comercializadora;nombre;tipo;peajes;provincias;P1_energia;P2_energia;P3_energia;P1_potencia;P2_potencia;excedentes;alquiler;fuente
+ */
+async function importarCsv(evento) {
+  const archivo = evento.target.files?.[0]
+  evento.target.value = ''
+  if (!archivo) return
+
+  importando.value = true
+  resumenImportacion.value = null
+  errorOferta.value = null
+
+  try {
+    const texto = await archivo.text()
+    const lineas = texto
+      .split(String.fromCharCode(10))
+      .map((l) => l.replace(String.fromCharCode(13), ''))
+      .filter((l) => l.trim())
+    if (lineas.length < 2) throw new Error('El CSV está vacío o solo tiene la cabecera')
+
+    const separador = lineas[0].includes(';') ? ';' : ','
+    const cabecera = lineas[0].split(separador).map((c) => c.trim().toLowerCase())
+
+    const leer = (celdas, nombre) => {
+      const i = cabecera.indexOf(nombre)
+      return i === -1 ? '' : (celdas[i] || '').trim()
+    }
+
+    let creadas = 0
+    const errores = []
+
+    for (const linea of lineas.slice(1)) {
+      const celdas = linea.split(separador)
+      try {
+        await comparador.crearOferta({
+          comercializadora: leer(celdas, 'comercializadora'),
+          nombre: leer(celdas, 'nombre'),
+          tipo: leer(celdas, 'tipo') || 'fijo',
+          peajes: (leer(celdas, 'peajes') || '2.0TD').split(/[|,]/).map((p) => p.trim()).filter(Boolean),
+          provincias: leer(celdas, 'provincias').split(/[|,]/).map((p) => p.trim()).filter(Boolean),
+          precio_energia: {
+            P1: leer(celdas, 'p1_energia'), P2: leer(celdas, 'p2_energia'), P3: leer(celdas, 'p3_energia')
+          },
+          precio_potencia: {
+            P1: leer(celdas, 'p1_potencia'), P2: leer(celdas, 'p2_potencia')
+          },
+          precio_excedentes: leer(celdas, 'excedentes') || 0,
+          alquiler_contador: leer(celdas, 'alquiler') || 0,
+          fuente: leer(celdas, 'fuente')
+        })
+        creadas++
+      } catch (e) {
+        errores.push(e.response?.data?.error || e.message)
+      }
+    }
+
+    resumenImportacion.value = `${creadas} oferta(s) importadas` +
+      (errores.length ? ` · ${errores.length} con error: ${errores[0]}` : '')
+  } catch (e) {
+    errorOferta.value = e.message
+  } finally {
+    importando.value = false
   }
 }
 
@@ -650,4 +730,7 @@ onMounted(async () => {
 }
 
 .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.8125rem; }
+.cabecera-catalogo { display: flex; gap: 0.5rem; }
+.oculto { display: none; }
+.resumen-importacion { font-size: 0.8125rem; color: var(--color-success); font-weight: 500; }
 </style>
