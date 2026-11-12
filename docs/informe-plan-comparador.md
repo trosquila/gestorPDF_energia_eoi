@@ -134,10 +134,13 @@ bono_social         boolean,
 
 | Fuente | Prueba | Resultado | Uso previsto |
 |---|---|---|---|
-| `apidatos.ree.es` (REE) | PVPC + precio spot | **200 OK, datos reales** (10/11/2026 00:00 → PVPC 181,88 €/MWh; spot 184 €/MWh) | **base del comparador** |
+| `apidatos.ree.es` (la API que hay detrás de `www.ree.es/es/datos/apidatos`) | PVPC + precio spot por horas | **200, datos reales** (10/11/2026 00:00 → PVPC **181,88 €/MWh**, spot 184 €/MWh). Funciona hoy, histórico (marzo 2024: 48 val/h) y hasta un mes seguido (octubre 2026: 745 val/h) | **base del comparador** |
 | `api.esios.ree.es` | indicador 1001 | **403 sin token** | opcional: más indicadores con token gratuito |
-| OMIE (ficheros diarios) | `marginalpdbc_20261110.1` | 200 pero **0 bytes** con ese nombre | fase 2, parseo frágil |
+| OMIE (ficheros diarios) | fichero `marginalpdbc` | pendiente de revalidar (el 0 bytes anterior fue un fallo mío de ruta temporal) | fase 2 opcional |
 | Comparador CNMC | API de ofertas | **301**, sin API pública documentada | referencia legal; catálogo espejo, no scraping |
+
+Comprobación adicional con `geo_ids` (Murcia, 8741): **el precio es idéntico** (181,88 €/MWh con y sin geo). Es lógico: el mercado y el PVPC son peninsulares. Consecuencia de diseño: **la provincia no cambia el precio de mercado**, cambia los peajes de distribución, los cargos y las ofertas comerciales que la aplican. El comparador debe usar la provincia para eso, no para el precio de la energía.
+
 
 Conclusión honesta: **no existe una API pública abierta con las tarifas comerciales de las comercializadoras**. Lo que sí hay, gratis y fiable, es el precio de mercado (PVPC y spot). Por eso el comparador se construye así:
 
@@ -195,7 +198,7 @@ Cada fase se puede parar sin dejar el repo a medias.
    - (a) **catálogo propio por CSV** que mantienes tú — recomendado, legal y estable;
    - (b) scraping del comparador de la CNMC — se rompe y tiene riesgo de uso;
    - (c) **solo PVPC y mercado**, sin tarifas comerciales (comparador más limitado).
-3. **Token de ESIOS:** es gratuito pero tarda 1-2 días en concederse. ¿Lo pides tú (icono "Solicitud de Token" en esios.ree.es) o avanzamos solo con `apidatos.ree.es`, que ya funciona sin token?
+3. ~~**Token de ESIOS:**~~ **Resuelto: no hace falta.** `apidatos.ree.es` ya devuelve PVPC y spot (hoy, histórico y un mes de golpe) sin token. El token de ESIOS queda como mejora opcional para la analítica avanzada (mix de generación, CO₂), no bloquea el comparador.
 4. **Acceso:** ¿el comparador es público (sin login) o solo para usuarios registrados?
 
 Con esas cuatro respuestas empiezo por la fase 0 y 1 sin tocar nada más.
