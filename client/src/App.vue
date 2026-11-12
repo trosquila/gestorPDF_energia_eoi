@@ -13,6 +13,10 @@
           <router-link to="/lote" class="nav-link" :class="{ active: esZonaLote }">Lote</router-link>
           <router-link to="/analitica" class="nav-link" :class="{ active: isActive('/analitica') }">Analítica</router-link>
           <router-link
+            to="/comparador"
+            class="nav-link"
+            :class="{ active: isActive('/comparador') }">Comparador</router-link>
+          <router-link
             v-if="authStore.isAdmin"
             to="/clientes"
             class="nav-link"

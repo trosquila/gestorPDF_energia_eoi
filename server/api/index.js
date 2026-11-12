@@ -9,6 +9,7 @@ import { usuariosRouter } from '../routes/usuarios_historial.js'
 import { historialRouter } from '../routes/usuarios_historial.js'
 import { clientesRouter } from '../routes/clientes.js'
 import { solicitudesRouter } from '../routes/solicitudes.js'
+import { comparadorRouter } from '../routes/comparador.js'
 
 const app = express()
 
@@ -23,6 +24,7 @@ app.use('/api/usuarios', usuariosRouter)
 app.use('/api/historial', historialRouter)
 app.use('/api/clientes', clientesRouter)
 app.use('/api/solicitudes', solicitudesRouter)
+app.use('/api/comparador', comparadorRouter)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

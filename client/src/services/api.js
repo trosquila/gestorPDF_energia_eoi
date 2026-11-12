@@ -83,6 +83,18 @@ export const clientesApi = {
   remove: (id) => api.delete(`/clientes/${id}`)
 }
 
+export const comparadorApi = {
+  fuentes: () => api.get('/comparador/fuentes'),
+  precios: (params) => api.get('/comparador/precios', { params }),
+  ofertas: () => api.get('/comparador/ofertas'),
+  crearOferta: (data) => api.post('/comparador/ofertas', data),
+  actualizarOferta: (id, data) => api.patch(`/comparador/ofertas/${id}`, data),
+  eliminarOferta: (id) => api.delete(`/comparador/ofertas/${id}`),
+  simular: (perfil) => api.post('/comparador/simular', perfil),
+  asistente: (datos, pregunta) => api.post('/comparador/asistente', { datos, pregunta }, { timeout: 60000 }),
+  perfilDeFactura: (id) => api.get(`/comparador/facturas/${id}/perfil`)
+}
+
 export const solicitudesApi = {
   list: (params) => api.get('/solicitudes', { params }),
   aprobar: (id) => api.post(`/solicitudes/${id}/aprobar`),
