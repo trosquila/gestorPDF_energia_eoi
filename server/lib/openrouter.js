@@ -114,12 +114,27 @@ export async function evaluarExtraccionIA(dataIa, texto) {
 
   const reglas = texto ? extractWithRegex(texto) : { data: {}, methods: {} }
 
-  const data = { ...reglas.data, ...dataIa }
-
+  // Se parte de las reglas y solo se sobrescribe con valores REALES de la IA.
+  // Antes era { ...reglas.data, ...dataIa } y los null de la IA (el esquema los
+  // exige) borraban lo que las reglas sí habían encontrado: potencias y precios
+  // por periodo se perdían aunque el OCR los tuviera claros.
+  const data = { ...reglas.data }
   const methods = {}
-  for (const [clave, valor] of Object.entries(data)) {
-    if (valor === undefined || valor === null) continue
-    methods[clave] = clave in dataIa ? 'llm' : 'regla'
+  for (const clave of Object.keys(reglas.data)) methods[clave] = 'regla'
+
+  for (const [clave, valor] of Object.entries(dataIa || {})) {
+    if (valor === null || valor === undefined || valor === '') continue
+
+    // Los mapas por periodo se combinan: lo que la IA no ve, lo aporta la regla
+    if (typeof valor === 'object' && !Array.isArray(valor)) {
+      if (Object.keys(valor).length === 0) continue
+      data[clave] = { ...(reglas.data[clave] || {}), ...valor }
+      methods[clave] = 'llm'
+      continue
+    }
+
+    data[clave] = valor
+    methods[clave] = 'llm'
   }
 
   const hayReglas = Object.values(methods).includes('regla')
