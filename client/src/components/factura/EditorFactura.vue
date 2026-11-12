@@ -43,18 +43,157 @@
         </template>
       </div>
 
-      <div class="field-grid">
-        <FieldInput
-          v-for="campo in camposEditables"
-          :key="campo.key"
-          v-model="formData[campo.key]"
-          :label="campo.label"
-          :type="campo.type"
-          :step="campo.step"
-          :method="factura?.metodos_extraccion?.[campo.key] || (esManual ? 'manual' : 'regla')"
-          :readonly="campo.readonly"
-          :placeholder="campo.placeholder" />
-      </div>
+      <!-- ===== 1. Suministro y contrato ===== -->
+      <section class="bloque">
+        <h4 class="bloque-titulo">Suministro y contrato</h4>
+        <div class="field-grid">
+          <FieldInput
+            v-for="campo in camposSuministro"
+            :key="campo.key"
+            v-model="formData[campo.key]"
+            :label="campo.label"
+            :type="campo.type"
+            :step="campo.step"
+            :method="metodoDe(campo.key)"
+            :readonly="campo.readonly" />
+        </div>
+      </section>
+
+      <!-- ===== 2. Potencia por periodo ===== -->
+      <section class="bloque">
+        <h4 class="bloque-titulo">
+          Potencia por periodo (kW)
+          <span v-if="peaje" class="bloque-nota">{{ peaje }}</span>
+        </h4>
+        <p class="bloque-ayuda">
+          La máxima demandada la incluye la distribuidora: es el dato que detecta si sobra potencia contratada.
+        </p>
+        <div class="table-container compact">
+          <table>
+            <thead>
+              <tr>
+                <th>Periodo</th>
+                <th>Contratada</th>
+                <th>Máxima demandada</th>
+                <th>Precio (€/kW/año)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="periodo in periodosPotencia" :key="`pot-${periodo}`">
+                <td class="periodo-celda">{{ periodo }}</td>
+                <td><input v-model.number="formData.potencias_contratadas[periodo]" type="number" step="0.01" min="0" class="form-input form-input-sm" /></td>
+                <td><input v-model.number="formData.potencias_maximas[periodo]" type="number" step="0.01" min="0" class="form-input form-input-sm" /></td>
+                <td><input v-model.number="formData.precio_potencia[periodo]" type="number" step="0.0001" min="0" class="form-input form-input-sm" /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p v-if="avisoPotencia" class="aviso-sugerencia">{{ avisoPotencia }}</p>
+      </section>
+
+      <!-- ===== 3. Energía por periodo ===== -->
+      <section class="bloque">
+        <h4 class="bloque-titulo">Energía por periodo</h4>
+        <div class="table-container compact">
+          <table>
+            <thead>
+              <tr>
+                <th>Periodo</th>
+                <th>Consumo (kWh)</th>
+                <th>Precio (€/kWh)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="periodo in periodosEnergia" :key="`ene-${periodo}`">
+                <td class="periodo-celda">{{ periodo }}</td>
+                <td><input v-model.number="formData.consumos_periodo[periodo]" type="number" step="0.01" min="0" class="form-input form-input-sm" /></td>
+                <td><input v-model.number="formData.precios_periodo[periodo]" type="number" step="0.0001" min="0" class="form-input form-input-sm" /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="bloque-nota" v-if="sumaConsumos > 0">
+          Suma de periodos: <strong>{{ formatearNumero(sumaConsumos) }} kWh</strong>
+          <template v-if="diferenciaConsumo !== null">
+            <span :class="['descuadre', { ok: Math.abs(diferenciaConsumo) <= 0.5 }]">
+              · {{ diferenciaConsumo > 0 ? 'faltan' : 'sobran' }}
+              {{ formatearNumero(Math.abs(diferenciaConsumo)) }} kWh respecto al total
+            </span>
+          </template>
+        </p>
+        <div class="field-grid">
+          <FieldInput
+            v-model="formData.consumo_total_kwh"
+            label="Consumo total facturado (kWh)"
+            type="number"
+            step="0.01"
+            :method="metodoDe('consumo_total_kwh')" />
+          <FieldInput
+            v-model="formData.dias_facturados"
+            label="Días facturados"
+            type="number"
+            step="1"
+            :method="metodoDe('dias_facturados')" />
+        </div>
+      </section>
+
+      <!-- ===== 4. Autoconsumo ===== -->
+      <section class="bloque">
+        <h4 class="bloque-titulo">Autoconsumo</h4>
+        <div class="field-grid">
+          <div class="form-group">
+            <label class="form-label" for="autoconsumo">Modalidad</label>
+            <select id="autoconsumo" v-model="formData.autoconsumo" class="form-input">
+              <option value="">— Sin datos —</option>
+              <option value="sin">Sin autoconsumo</option>
+              <option value="excedentes">Con excedentes</option>
+              <option value="compensacion_simplificada">Compensación simplificada</option>
+            </select>
+          </div>
+          <FieldInput
+            v-model="formData.excedentes_kwh"
+            label="Excedentes (kWh)"
+            type="number"
+            step="0.01"
+            :method="metodoDe('excedentes_kwh')" />
+          <FieldInput
+            v-model="formData.excedentes_eur"
+            label="Compensación de excedentes (€)"
+            type="number"
+            step="0.01"
+            :method="metodoDe('excedentes_eur')" />
+        </div>
+      </section>
+
+      <!-- ===== 5. Desglose económico ===== -->
+      <section class="bloque">
+        <h4 class="bloque-titulo">Desglose económico (€)</h4>
+        <div class="field-grid">
+          <FieldInput
+            v-for="campo in camposEconomicos"
+            :key="campo.key"
+            v-model="formData[campo.key]"
+            :label="campo.label"
+            type="number"
+            step="0.01"
+            :method="metodoDe(campo.key)" />
+          <div class="form-group">
+            <label class="form-label" for="tipo-lectura">Tipo de lectura</label>
+            <select id="tipo-lectura" v-model="formData.tipo_lectura" class="form-input">
+              <option value="">— Sin datos —</option>
+              <option value="real">Real</option>
+              <option value="estimada">Estimada</option>
+            </select>
+          </div>
+          <div class="form-group campo-bono">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="formData.bono_social" />
+              Bono social
+            </label>
+          </div>
+        </div>
+        <p class="bloque-nota">{{ textoCuadre }}</p>
+      </section>
 
       <div class="field-grid" v-if="lineas.length > 0">
         <div class="field-full">
@@ -83,6 +222,8 @@
           </div>
         </div>
       </div>
+
+      <p v-if="store.aviso" class="aviso-guardado">{{ store.aviso }}</p>
 
       <div class="form-actions">
         <span v-if="guardadoOk" class="guardado-ok">✓ Cambios guardados</span>
@@ -166,31 +307,136 @@ const rutaArchivo = computed(() => {
   return ruta && !String(ruta).startsWith('data:') ? ruta : null
 })
 
-const camposEditables = [
+const camposSuministro = [
   { key: 'num_factura', label: 'Número de factura', type: 'text' },
+  { key: 'id_contrato', label: 'Nº de contrato', type: 'text' },
   { key: 'fecha_emision', label: 'Fecha emisión', type: 'date' },
+  { key: 'fecha_fin_contrato', label: 'Fin de contrato', type: 'date' },
   { key: 'periodo_inicio', label: 'Periodo inicio', type: 'date' },
   { key: 'periodo_fin', label: 'Periodo fin', type: 'date' },
   { key: 'titular', label: 'Titular', type: 'text' },
   { key: 'nif', label: 'NIF/CIF', type: 'text' },
   { key: 'cups', label: 'CUPS', type: 'text', readonly: true },
-  { key: 'direccion_suministro', label: 'Dirección suministro', type: 'text' },
+  { key: 'direccion_suministro', label: 'Dirección de suministro', type: 'text' },
+  { key: 'codigo_postal', label: 'Código postal', type: 'text' },
+  { key: 'provincia', label: 'Provincia', type: 'text' },
   { key: 'comercializadora', label: 'Comercializadora', type: 'text' },
-  { key: 'tipo_contrato', label: 'Tipo contrato', type: 'text' },
-  { key: 'peaje_acceso', label: 'Peaje acceso', type: 'text' },
-  { key: 'consumo_total_kwh', label: 'Consumo total (kWh)', type: 'number', step: '0.01' },
-  { key: 'importe_total_eur', label: 'Importe total (€)', type: 'number', step: '0.01' }
+  { key: 'peaje_acceso', label: 'Tarifa de acceso (peaje)', type: 'text' },
+  { key: 'tipo_contrato', label: 'Tipo de contrato', type: 'text' },
+  { key: 'tipo_suministro', label: 'Tipo de suministro', type: 'text' }
+]
+
+const camposEconomicos = [
+  { key: 'importe_total_eur', label: 'Total factura' },
+  { key: 'peajes_cargos_eur', label: 'Peajes y cargos' },
+  { key: 'alquiler_contador_eur', label: 'Alquiler de contador' },
+  { key: 'impuesto_electrico_eur', label: 'Impuesto eléctrico' },
+  { key: 'iva_eur', label: 'IVA' },
+  { key: 'otros_servicios_eur', label: 'Otros servicios' }
+]
+
+// Campos planos que viajan al backend
+const CAMPOS_PLANOS = [
+  ...camposSuministro.map(c => c.key),
+  'consumo_total_kwh', 'dias_facturados', 'tipo_lectura', 'autoconsumo',
+  'excedentes_kwh', 'excedentes_eur',
+  ...camposEconomicos.map(c => c.key),
+  'bono_social'
+]
+
+const CAMPOS_PERIODOS = [
+  'potencias_contratadas', 'potencias_maximas', 'precio_potencia',
+  'consumos_periodo', 'precios_periodo'
 ]
 
 let sincronizando = false
 
 function estadoDeFormulario(factura) {
   const datos = {}
-  for (const campo of camposEditables) {
-    const valor = factura?.[campo.key]
-    datos[campo.key] = valor === null || valor === undefined ? '' : valor
+  for (const campo of CAMPOS_PLANOS) {
+    const valor = factura?.[campo]
+    if (campo === 'bono_social') {
+      datos[campo] = valor === true
+      continue
+    }
+    datos[campo] = valor === null || valor === undefined ? '' : valor
+  }
+  // Los mapas se copian para no mutar el objeto del padre
+  for (const campo of CAMPOS_PERIODOS) {
+    datos[campo] = { ...(factura?.[campo] || {}) }
+  }
+  // Facturas antiguas: el consumo total no tenía desglose por periodos
+  if (Object.keys(datos.consumos_periodo).length === 0 && factura?.consumo_total_kwh) {
+    datos.consumos_periodo = { P1: factura.consumo_total_kwh }
   }
   return datos
+}
+
+// --- Periodos según el peaje (2.0TD: P1-P2 potencia, P1-P3 energía) ---
+const peaje = computed(() => String(formData.value.peaje_acceso || '').trim().toUpperCase())
+// Sin peaje identificado se asume 2.0TD (el caso más común); si la factura
+// trae datos de P3..P6 se muestran igualmente (periodosVisibles los añade).
+const es2punto0 = computed(() => !peaje.value || peaje.value.startsWith('2.0'))
+
+function periodosVisibles(base) {
+  const conDatos = new Set()
+  for (const campo of CAMPOS_PERIODOS) {
+    for (const [periodo, valor] of Object.entries(formData.value[campo] || {})) {
+      if (valor !== null && valor !== undefined && valor !== '') conDatos.add(periodo)
+    }
+  }
+  return [...new Set([...base, ...conDatos])].filter(p => /^P[1-6]$/.test(p)).sort()
+}
+
+const periodosPotencia = computed(() =>
+  periodosVisibles(es2punto0.value ? ['P1', 'P2'] : ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'])
+)
+const periodosEnergia = computed(() =>
+  periodosVisibles(es2punto0.value ? ['P1', 'P2', 'P3'] : ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'])
+)
+
+function metodoDe(campo) {
+  return props.factura?.metodos_extraccion?.[campo] || (esManual.value ? 'manual' : 'regla')
+}
+
+// --- Avisos de coherencia ---
+const sumaConsumos = computed(() => {
+  const valores = Object.values(formData.value.consumos_periodo || {})
+  return valores.reduce((total, v) => total + (Number(v) || 0), 0)
+})
+
+const diferenciaConsumo = computed(() => {
+  const total = Number(formData.value.consumo_total_kwh)
+  if (!total || !sumaConsumos.value) return null
+  return Math.round((total - sumaConsumos.value) * 100) / 100
+})
+
+const avisoPotencia = computed(() => {
+  const contratadas = formData.value.potencias_contratadas || {}
+  const maximas = formData.value.potencias_maximas || {}
+  const periodos = Object.keys(contratadas).filter(p =>
+    maximas[p] !== undefined && maximas[p] !== null && maximas[p] !== ''
+  )
+  if (periodos.length === 0) return null
+  const sobre = periodos.filter(p => Number(contratadas[p]) > Number(maximas[p]) * 1.35 && Number(maximas[p]) > 0)
+  if (sobre.length === 0) return null
+  return `Posible sobrecontratación en ${sobre.join(', ')}: la potencia máxima demandada está muy por debajo de la contratada.`
+})
+
+const textoCuadre = computed(() => {
+  const total = Number(formData.value.importe_total_eur)
+  const suma = ['peajes_cargos_eur', 'alquiler_contador_eur', 'impuesto_electrico_eur', 'iva_eur', 'otros_servicios_eur']
+    .reduce((t, k) => t + (Number(formData.value[k]) || 0), 0)
+  if (!total) return 'Sin total no se puede comprobar el desglose.'
+  if (!suma) return 'Sin desglose: escribe peajes, impuestos e IVA para poder auditarla.'
+  const diferencia = Math.round((total - suma) * 100) / 100
+  return Math.abs(diferencia) <= 0.5
+    ? 'El desglose cuadra con el total (falta aún el término de energía: es normal).'
+    : `Desglose y total difieren en ${formatearNumero(Math.abs(diferencia))} €.`
+})
+
+function formatearNumero(valor) {
+  return Number(valor).toLocaleString('es-ES', { maximumFractionDigits: 2 })
 }
 
 function cargarDesde(factura) {
@@ -227,12 +473,30 @@ function mostrarGuardado() {
   setTimeout(() => { guardadoOk.value = false }, 2500)
 }
 
+/** Cuerpo que espera la API: planos + mapas por periodo (vacíos = null). */
 function datosDelFormulario() {
   const datos = {}
-  for (const campo of camposEditables) {
-    const valor = formData.value[campo.key]
-    if (valor !== undefined && valor !== null && valor !== '') datos[campo.key] = valor
+
+  for (const campo of CAMPOS_PLANOS) {
+    const valor = formData.value[campo]
+    if (campo === 'bono_social') {
+      datos[campo] = valor === true
+      continue
+    }
+    if (valor === undefined || valor === null || valor === '') continue
+    datos[campo] = valor
   }
+
+  for (const campo of CAMPOS_PERIODOS) {
+    const periodos = {}
+    for (const [periodo, valor] of Object.entries(formData.value[campo] || {})) {
+      if (valor === '' || valor === null || valor === undefined) continue
+      const numero = Number(valor)
+      if (Number.isFinite(numero)) periodos[periodo] = numero
+    }
+    datos[campo] = Object.keys(periodos).length > 0 ? periodos : null
+  }
+
   return datos
 }
 
@@ -386,5 +650,80 @@ onUnmounted(() => {
 <style scoped>
 .editor {
   min-height: 320px;
+}
+
+.bloque {
+  margin-bottom: 1.75rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.bloque:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.bloque-titulo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.bloque-nota {
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-text-muted);
+}
+
+.bloque-ayuda {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.6rem;
+}
+
+.periodo-celda {
+  font-weight: 600;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.aviso-sugerencia {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  border-left: 4px solid var(--color-warning);
+  background: rgba(245, 158, 11, 0.12);
+  font-size: 0.8125rem;
+}
+
+.descuadre {
+  color: var(--color-warning);
+}
+
+.descuadre.ok {
+  color: var(--color-success);
+}
+
+.aviso-guardado {
+  margin-top: 1rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 6px;
+  border-left: 4px solid var(--color-warning);
+  background: rgba(245, 158, 11, 0.12);
+  font-size: 0.8125rem;
+}
+
+.campo-bono {
+  display: flex;
+  align-items: center;
+  padding-top: 1.6rem;
 }
 </style>

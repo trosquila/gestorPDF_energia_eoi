@@ -78,6 +78,65 @@ function parseDate(str) {
   return null
 }
 
+// Provincias de España: sirven para deducir la zona desde la dirección del
+// suministro (la provincia afecta a peajes y a qué ofertas se contratan).
+const PROVINCIAS = [
+  'Álava', 'Albacete', 'Alicante', 'Almería', 'Asturias', 'Ávila', 'Badajoz', 'Baleares',
+  'Barcelona', 'Burgos', 'Cáceres', 'Cádiz', 'Cantabria', 'Castellón', 'Ceuta',
+  'Ciudad Real', 'Córdoba', 'Cuenca', 'Girona', 'Granada', 'Guadalajara', 'Guipúzcoa',
+  'Huelva', 'Huesca', 'Jaén', 'La Coruña', 'La Rioja', 'Las Palmas', 'León', 'Lleida',
+  'Lugo', 'Madrid', 'Málaga', 'Melilla', 'Murcia', 'Navarra', 'Ourense', 'Palencia',
+  'Pontevedra', 'Salamanca', 'Santa Cruz de Tenerife', 'Segovia', 'Sevilla', 'Soria',
+  'Tarragona', 'Teruel', 'Toledo', 'Valencia', 'Valladolid', 'Vizcaya', 'Zamora', 'Zaragoza'
+]
+
+/** Extrae pares "P1: 4,60" de un texto. Se queda con el primer valor por periodo. */
+function extraerPorPeriodo(texto, patron) {
+  const mapa = {}
+  for (const coincidencia of texto.matchAll(patron)) {
+    const periodo = coincidencia[1].toUpperCase()
+    const valor = cleanNumber(coincidencia[2])
+    if (valor === null) continue
+    if (mapa[periodo] === undefined) mapa[periodo] = valor
+  }
+  return mapa
+}
+
+/** Primer número capturado por el patrón, o null. */
+function primerNumero(texto, patron) {
+  const coincidencia = texto.match(patron)
+  return coincidencia ? cleanNumber(coincidencia[1]) : null
+}
+
+/**
+ * Potencias por periodo separando contratada de máxima demandada.
+ * La distribuidora está obligada a incluir las máximas: son el dato que
+ * detecta sobrecontratación (≈70 % de los hogares, según la CNMC).
+ */
+function extraerPotenciasPorLinea(lines) {
+  const contratadas = {}
+  const maximas = {}
+
+  for (const linea of lines) {
+    const esMaxima = /m[aá]xima|demandada|demanda/i.test(linea)
+    const esContratada = /contratad/i.test(linea)
+
+    for (const coincidencia of linea.matchAll(/(P[1-6])\s*[:.\-]?\s*(\d{1,2}(?:[.,]\d+)?)\s*kW\b/gi)) {
+      const periodo = coincidencia[1].toUpperCase()
+      const valor = cleanNumber(coincidencia[2])
+      if (valor === null || valor <= 0 || valor > 100) continue
+
+      if (esMaxima && !esContratada) {
+        if (maximas[periodo] === undefined) maximas[periodo] = valor
+      } else if (contratadas[periodo] === undefined) {
+        contratadas[periodo] = valor
+      }
+    }
+  }
+
+  return { contratadas, maximas }
+}
+
 export function extractWithRegex(text) {
   const normalized = text.replace(/\s+/g, ' ')
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0)
@@ -174,13 +233,14 @@ export function extractWithRegex(text) {
     }
   }
   
-  // Potencia
-  const potenciaMatches = [...normalized.matchAll(PATTERNS.potencia)]
-  if (potenciaMatches.length > 0) {
+  // Potencia genérica: solo como último recurso si no hay desglose por periodos,
+  // y se guarda en P1 (antes se escribía 'potencia_contratada', que no es columna).
+  if (!results.potencias_contratadas) {
+    const potenciaMatches = [...normalized.matchAll(PATTERNS.potencia)]
     const potencias = potenciaMatches.map(m => cleanNumber(m[1])).filter(v => v > 0 && v < 100)
     if (potencias.length > 0) {
-      results.potencia_contratada = potencias[0]
-      methods.potencia_contratada = 'regla'
+      results.potencias_contratadas = { P1: potencias[0] }
+      methods.potencias_contratadas = 'regla'
     }
   }
   
@@ -196,6 +256,117 @@ export function extractWithRegex(text) {
   if (tipoMatch) {
     results.tipo_contrato = tipoMatch[1].toUpperCase()
     methods.tipo_contrato = 'regla'
+  }
+
+  // === Campos de energía por periodo (P1..P6) ===
+  // "P1: 4,60 kW" / "Potencia contratada P1 4,60 kW" / "Consumo P2: 98,20 kWh"
+  const { contratadas, maximas } = extraerPotenciasPorLinea(lines)
+  if (Object.keys(contratadas).length > 0) {
+    results.potencias_contratadas = contratadas
+    methods.potencias_contratadas = 'regla'
+  }
+  if (Object.keys(maximas).length > 0) {
+    results.potencias_maximas = maximas
+    methods.potencias_maximas = 'regla'
+  }
+
+  const consumos = extraerPorPeriodo(normalized, /(P[1-6])\s*[:.\-]?\s*(\d{1,4}(?:[.,]\d+)?)\s*kWh/gi)
+  if (Object.keys(consumos).length > 0) {
+    results.consumos_periodo = consumos
+    methods.consumos_periodo = 'regla'
+  }
+
+  const precios = extraerPorPeriodo(
+    normalized,
+    /(P[1-6])\s*[:.\-]?\s*(\d{1,2}[.,]\d{1,4})\s*(?:€|EUR|euros)\s*\/?\s*kWh/gi
+  )
+  if (Object.keys(precios).length > 0) {
+    results.precios_periodo = precios
+    methods.precios_periodo = 'regla'
+  }
+
+  // === Identificación del suministro ===
+  const contrato = normalized.match(/(?:N[º°]\s*(?:de\s*)?contrato|Contrato)\s*[:.]?\s*([A-Z0-9][A-Z0-9\-\/]{5,})/i)
+  if (contrato) {
+    results.id_contrato = contrato[1]
+    methods.id_contrato = 'regla'
+  }
+
+  const cp = normalized.match(/(?:C\.?P\.?|C[oó]digo\s+Postal)\s*[:.]?\s*(\d{5})\b/i)
+    || normalized.match(/\b(0[1-9]\d{3}|[1-4]\d{4}|5[0-2]\d{3})\b(?=[^\n]{0,40}(?:Salamanca|Madrid|Murcia|Barcelona|Valencia|Sevilla|Bilbao|M[aá]laga))/)
+  if (cp) {
+    results.codigo_postal = cp[1]
+    methods.codigo_postal = 'regla'
+  }
+
+  const provincia = PROVINCIAS.find((p) => new RegExp(`\\b${p}\\b`, 'i').test(normalized))
+  if (provincia) {
+    results.provincia = provincia
+    methods.provincia = 'regla'
+  }
+
+  // === Autoconsumo ===
+  if (/compensaci[oó]n\s+simplificada/i.test(normalized)) {
+    results.autoconsumo = 'compensacion_simplificada'
+  } else if (/autoconsumo|excedentes/i.test(normalized)) {
+    results.autoconsumo = 'excedentes'
+  }
+  if (results.autoconsumo) methods.autoconsumo = 'regla'
+
+  const excedentesKwh = primerNumero(normalized, /(?:excedentes?|vertidos?)[^\d\n]{0,30}(\d{1,5}(?:[.,]\d+)?)\s*kWh/i)
+  if (excedentesKwh !== null) {
+    results.excedentes_kwh = excedentesKwh
+    methods.excedentes_kwh = 'regla'
+  }
+
+  const excedentesEur = primerNumero(normalized, /compensaci[oó]n[^\d€\n]{0,40}(\d{1,4}[.,]\d{2})\s*€?/i)
+  if (excedentesEur !== null) {
+    results.excedentes_eur = excedentesEur
+    methods.excedentes_eur = 'regla'
+  }
+
+  // === Desglose económico ===
+  // El importe siempre lleva moneda: si no, se capturaba el porcentaje
+  // ("impuesto eléctrico 5,11 %" daba 5,11 € en vez del importe real).
+  const desglose = [
+    ['impuesto_electrico_eur', [
+      /impuesto\s+(?:sobre\s+la\s+)?el[eé]ctric[oa][^\n]{0,60}?(\d{1,3}[.,]\d{2})\s*(?:€|EUR|euros)/i,
+      /impuesto\s+(?:sobre\s+la\s+)?el[eé]ctric[oa][^\n]{0,40}?\d{1,2}[.,]\d{1,2}\s*%[^\n]{0,20}?(\d{1,3}[.,]\d{2})/i
+    ]],
+    ['iva_eur', [
+      /\bIVA\b[^\n]{0,60}?(\d{1,4}[.,]\d{2})\s*(?:€|EUR|euros)/i,
+      /\bIVA\b[^\n]{0,40}?\d{1,2}[.,]?\d{0,2}\s*%[^\n]{0,20}?(\d{1,4}[.,]\d{2})/i
+    ]],
+    ['alquiler_contador_eur', [
+      /alquiler[^\n]{0,40}?(\d{1,3}[.,]\d{2})\s*(?:€|EUR|euros)/i,
+      /alquiler[^\d€\n]{0,30}(\d{1,3}[.,]\d{2})/i
+    ]],
+    ['peajes_cargos_eur', [
+      /(?:peajes?\s*(?:y\s*)?cargos?|cargos?\s*regulados)[^\n]{0,50}?(\d{1,4}[.,]\d{2})\s*(?:€|EUR|euros)/i,
+      /(?:peajes?\s*(?:y\s*)?cargos?|cargos?\s*regulados)[^\d€\n]{0,30}(\d{1,4}[.,]\d{2})/i
+    ]]
+  ]
+  for (const [campo, patrones] of desglose) {
+    for (const patron of patrones) {
+      const valor = primerNumero(normalized, patron)
+      if (valor !== null) {
+        results[campo] = valor
+        methods[campo] = 'regla'
+        break
+      }
+    }
+  }
+
+  // === Facturación ===
+  const dias = primerNumero(normalized, /(\d{1,3})\s*d[ií]as\s*(?:de\s*)?(?:facturaci[oó]n|facturados)?/i)
+  if (dias !== null && dias > 0 && dias <= 400) {
+    results.dias_facturados = dias
+    methods.dias_facturados = 'regla'
+  }
+  const lectura = normalized.match(/lectura\s+(real|estimada)/i)
+  if (lectura) {
+    results.tipo_lectura = lectura[1].toLowerCase()
+    methods.tipo_lectura = 'regla'
   }
   
   // Titular (buscar en primeras líneas)

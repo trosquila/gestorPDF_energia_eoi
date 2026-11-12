@@ -31,6 +31,29 @@ const ESQUEMA_FACTURA = {
     peaje_acceso: { type: ['string', 'null'] },
     consumo_total_kwh: { type: ['number', 'null'] },
     importe_total_eur: { type: ['number', 'null'] },
+    id_contrato: { type: ['string', 'null'] },
+    fecha_fin_contrato: { type: ['string', 'null'] },
+    codigo_postal: { type: ['string', 'null'] },
+    provincia: { type: ['string', 'null'] },
+    tipo_suministro: { type: ['string', 'null'] },
+    // Mapas por período: {"P1":4.6,"P2":3.45} · potencias en kW, consumos en kWh,
+    // precios en €/kWh y precio_potencia en €/kW/año.
+    potencias_contratadas: { type: ['object', 'null'], additionalProperties: { type: 'number' } },
+    potencias_maximas: { type: ['object', 'null'], additionalProperties: { type: 'number' } },
+    precio_potencia: { type: ['object', 'null'], additionalProperties: { type: 'number' } },
+    consumos_periodo: { type: ['object', 'null'], additionalProperties: { type: 'number' } },
+    precios_periodo: { type: ['object', 'null'], additionalProperties: { type: 'number' } },
+    autoconsumo: { type: ['string', 'null'] },
+    excedentes_kwh: { type: ['number', 'null'] },
+    excedentes_eur: { type: ['number', 'null'] },
+    peajes_cargos_eur: { type: ['number', 'null'] },
+    alquiler_contador_eur: { type: ['number', 'null'] },
+    impuesto_electrico_eur: { type: ['number', 'null'] },
+    iva_eur: { type: ['number', 'null'] },
+    otros_servicios_eur: { type: ['number', 'null'] },
+    bono_social: { type: ['boolean', 'null'] },
+    dias_facturados: { type: ['number', 'null'] },
+    tipo_lectura: { type: ['string', 'null'] },
     lineas: {
       type: 'array',
       items: {
@@ -64,6 +87,14 @@ Reglas:
 - comercializadora: el nombre comercial (Endesa, Iberdrola, Naturgy, Repsol, EDP...).
 - tipo_contrato y peaje_acceso: normalmente el mismo código (2.0TD, 3.0TD...).
 - lineas: solo si el texto detalla conceptos facturados; si no, array vacío.
+- potencias_contratadas / potencias_maximas: mapas {"P1": kW, "P2": kW}. Las máximas
+  son las "potencias máximas demandadas" del periodo, no las contratadas.
+- consumos_periodo: {"P1": kWh, ...} con el consumo de cada periodo.
+- precios_periodo: {"P1": €/kWh, ...} con el precio de la energía de cada periodo.
+- autoconsumo: "sin", "excedentes" o "compensacion_simplificada".
+- impuesto_electrico_eur: importe del impuesto eléctrico (5,11 %), no el porcentaje.
+- iva_eur: importe del IVA, no el porcentaje.
+- codigo_postal: 5 dígitos del suministro. provincia: nombre de la provincia.
 
 TEXTO OCR:
 """

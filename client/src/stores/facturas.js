@@ -9,6 +9,7 @@ export const useFacturasStore = defineStore('facturas', () => {
   const error = ref(null)
   const metricas = ref(null)
   const analiticaData = ref(null)
+  const aviso = ref(null)
 
   const totalFacturas = computed(() => facturas.value.length)
   const facturasOk = computed(() => facturas.value.filter(f => f.estado_extraccion === 'ok').length)
@@ -73,6 +74,8 @@ export const useFacturasStore = defineStore('facturas', () => {
     error.value = null
     try {
       const response = await facturasApi.updateFactura(id, data)
+      // Aviso del backend (p. ej. columnas que aún no existen en la base)
+      aviso.value = response.data.aviso || null
       const actualizada = response.data.data || response.data
       if (facturaActual.value?.id_factura === id) facturaActual.value = actualizada
       const idx = facturas.value.findIndex((f) => f.id_factura === id)
@@ -184,6 +187,7 @@ export const useFacturasStore = defineStore('facturas', () => {
     error,
     metricas,
     analiticaData,
+    aviso,
     totalFacturas,
     facturasOk,
     facturasRegla,

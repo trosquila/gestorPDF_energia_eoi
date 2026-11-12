@@ -58,10 +58,46 @@ const CAMPOS_FACTURA = [
   'num_factura', 'fecha_emision', 'periodo_inicio', 'periodo_fin',
   'titular', 'nif', 'cups', 'direccion_suministro', 'comercializadora',
   'tipo_contrato', 'peaje_acceso', 'consumo_total_kwh', 'importe_total_eur',
-  'estado_extraccion', 'confianza', 'metodo_extraccion', 'metodos_extraccion', 'lineas'
+  'estado_extraccion', 'confianza', 'metodo_extraccion', 'metodos_extraccion', 'lineas',
+  // Campos de energía (sql/11_facturas_campos_energia.sql)
+  'id_contrato', 'fecha_fin_contrato', 'codigo_postal', 'provincia', 'tipo_suministro',
+  'potencias_contratadas', 'potencias_maximas', 'precio_potencia',
+  'consumos_periodo', 'precios_periodo',
+  'autoconsumo', 'excedentes_kwh', 'excedentes_eur',
+  'peajes_cargos_eur', 'alquiler_contador_eur', 'impuesto_electrico_eur', 'iva_eur',
+  'otros_servicios_eur', 'bono_social', 'dias_facturados', 'tipo_lectura'
 ]
 
-const CAMPOS_NUMERICOS = ['consumo_total_kwh', 'importe_total_eur', 'confianza']
+const CAMPOS_NUMERICOS = [
+  'consumo_total_kwh', 'importe_total_eur', 'confianza',
+  'excedentes_kwh', 'excedentes_eur',
+  'peajes_cargos_eur', 'alquiler_contador_eur', 'impuesto_electrico_eur', 'iva_eur',
+  'otros_servicios_eur'
+]
+
+const CAMPOS_ENTEROS = ['dias_facturados']
+
+const CAMPOS_BOOLEANOS = ['bono_social']
+
+// Períodos por tarifa de acceso: 2.0TD tiene 2 potencias y 3 energías;
+// 3.0TD y 6.1TD llegan a P1..P6.
+const CAMPOS_JSON = [
+  'potencias_contratadas', 'potencias_maximas', 'precio_potencia',
+  'consumos_periodo', 'precios_periodo'
+]
+
+/** Limpia un mapa de períodos ({"P1":4.6}) y descarta claves/valores vacíos. */
+function sanearPeriodos(valor) {
+  if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return null
+  const limpio = {}
+  for (const [periodo, cantidad] of Object.entries(valor)) {
+    if (!/^P[1-6]$/i.test(periodo)) continue
+    if (cantidad === null || cantidad === undefined || cantidad === '') continue
+    const numero = typeof cantidad === 'number' ? cantidad : Number(String(cantidad).replace(',', '.'))
+    if (Number.isFinite(numero)) limpio[periodo.toUpperCase()] = numero
+  }
+  return Object.keys(limpio).length > 0 ? limpio : null
+}
 
 /**
  * Deja solo columnas reales y normaliza tipos.
@@ -78,6 +114,23 @@ function sanearCampos(datos = {}) {
     }
     if (valor === undefined || valor === null || valor === '') continue
 
+    if (CAMPOS_JSON.includes(clave)) {
+      const periodos = sanearPeriodos(valor)
+      if (periodos) limpio[clave] = periodos
+      continue
+    }
+
+    if (CAMPOS_BOOLEANOS.includes(clave)) {
+      limpio[clave] = valor === true || valor === 'true' || valor === 1 || valor === '1'
+      continue
+    }
+
+    if (CAMPOS_ENTEROS.includes(clave)) {
+      const numero = Number.parseInt(String(valor), 10)
+      if (Number.isFinite(numero)) limpio[clave] = numero
+      continue
+    }
+
     if (CAMPOS_NUMERICOS.includes(clave)) {
       const numero = typeof valor === 'number' ? valor : Number(String(valor).replace(',', '.'))
       if (Number.isFinite(numero)) limpio[clave] = numero
@@ -91,16 +144,47 @@ function sanearCampos(datos = {}) {
 }
 
 /**
+ * Si PostgREST rechaza una columna que todavía no existe (migración pendiente),
+ * la quita y reintenta en vez de romper el guardado entero.
+ * Avisa en el log de qué script hay que ejecutar.
+ */
+async function conReintentoPorColumnas(ejecutar, datos, etiqueta = 'factura') {
+  let actuales = { ...datos }
+  const omitidas = []
+
+  for (let intento = 0; intento < 10; intento++) {
+    const resultado = await ejecutar(actuales)
+    if (!resultado.error) {
+      if (omitidas.length > 0) resultado.omitidas = omitidas
+      return resultado
+    }
+
+    const mensaje = resultado.error.message || ''
+    const columna = /Could not find the '([^']+)' column/.exec(mensaje)
+    if (resultado.error.code !== 'PGRST204' || !columna) return resultado
+
+    console.warn(
+      `[${etiqueta}] la columna '${columna[1]}' no existe y se omite. ` +
+      'Ejecuta server/sql/11_facturas_campos_energia.sql'
+    )
+    omitidas.push(columna[1])
+    delete actuales[columna[1]]
+  }
+
+  return { data: null, error: new Error('Demasiadas columnas inexistentes en la tabla facturas') }
+}
+
+/**
  * Inserta la factura. Si la constraint de 'metodo_extraccion' aún no admite
  * 'manual' (falta sql/06_metodo_manual.sql), reintenta como 'regla' para que
  * el guardado no falle.
  */
 async function insertarFactura(supabase, facturaData) {
-  let { data, error } = await supabase
-    .from('facturas')
-    .insert(facturaData)
-    .select()
-    .single()
+  let { data, error } = await conReintentoPorColumnas(
+    (datos) => supabase.from('facturas').insert(datos).select().single(),
+    facturaData,
+    'insertar factura'
+  )
 
   const falloConstraint = error &&
     /metodo_extraccion_check/i.test(error.message || '') &&
@@ -547,12 +631,21 @@ router.patch('/:id', async (req, res, next) => {
       'num_factura', 'fecha_emision', 'periodo_inicio', 'periodo_fin',
       'titular', 'nif', 'cups', 'direccion_suministro', 'comercializadora',
       'tipo_contrato', 'peaje_acceso', 'consumo_total_kwh', 'importe_total_eur',
-      'lineas', 'estado_extraccion', 'confianza', 'metodo_extraccion', 'metodos_extraccion'
+      'lineas', 'estado_extraccion', 'confianza', 'metodo_extraccion', 'metodos_extraccion',
+      'id_contrato', 'fecha_fin_contrato', 'codigo_postal', 'provincia', 'tipo_suministro',
+      'potencias_contratadas', 'potencias_maximas', 'precio_potencia',
+      'consumos_periodo', 'precios_periodo', 'autoconsumo',
+      'excedentes_kwh', 'excedentes_eur', 'peajes_cargos_eur', 'alquiler_contador_eur',
+      'impuesto_electrico_eur', 'iva_eur', 'otros_servicios_eur', 'bono_social',
+      'dias_facturados', 'tipo_lectura'
     ]
 
+    const { limpio } = sanearCampos(req.body)
     const updates = { updated_at: new Date().toISOString() }
     for (const campo of CAMPOS_EDITABLES) {
-      if (req.body[campo] !== undefined) updates[campo] = req.body[campo]
+      if (req.body[campo] === undefined) continue
+      // null explícito = vaciar el campo; los saneados van con tipo normalizado
+      updates[campo] = req.body[campo] === null ? null : (limpio[campo] ?? null)
     }
 
     const camposModificados = Object.keys(updates).filter((k) => k !== 'updated_at')
@@ -560,12 +653,16 @@ router.patch('/:id', async (req, res, next) => {
       return res.status(400).json({ error: 'No hay campos que actualizar' })
     }
 
-    const { data, error } = await supabase
-      .from('facturas')
-      .update(updates)
-      .eq('id_factura', req.params.id)
-      .select()
-      .single()
+    const { data, error, omitidas } = await conReintentoPorColumnas(
+      (datos) => supabase
+        .from('facturas')
+        .update(datos)
+        .eq('id_factura', req.params.id)
+        .select()
+        .single(),
+      updates,
+      'actualizar factura'
+    )
     
     if (error) {
       if (error.code === 'PGRST116') {
@@ -586,7 +683,12 @@ router.patch('/:id', async (req, res, next) => {
       user_agent: req.headers['user-agent']
     })
     
-    res.json({ data })
+    res.json({
+      data,
+      aviso: omitidas?.length
+        ? `Faltan columnas en la base de datos (${omitidas.slice(0, 4).join(', ')}). Ejecuta server/sql/11_facturas_campos_energia.sql: esos campos no se han guardado.`
+        : undefined
+    })
   } catch (error) {
     next(error)
   }
