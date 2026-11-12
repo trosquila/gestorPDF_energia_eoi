@@ -263,3 +263,14 @@ npm test
 ## 📄 Licencia
 
 MIT - Uso libre para proyectos personales y comerciales.
+## 🚀 Despliegue
+
+Dos proyectos en Vercel conectados a este repositorio (`master` = producción):
+
+| Proyecto | Carpeta raíz | URL |
+|---|---|---|
+| `gestorpdf-energia-api` | `server/` | https://gestorpdf-energia-api.vercel.app |
+| `gestorpdf-energia-web` | `client/` | https://gestorpdf-energia-web.vercel.app |
+
+Cada push a `master` despliega ambos automáticamente. Las variables de entorno
+(`SUPABASE_*`, `OPENROUTER_API_KEY`, `VITE_API_URL`) están solo en Vercel.
