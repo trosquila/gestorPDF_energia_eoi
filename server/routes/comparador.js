@@ -241,15 +241,23 @@ function claveOferta(oferta) {
 }
 
 async function desactivarObsoletas(supabase, vigentes) {
-  const { data, error } = await supabase
+  // `vigentes` lleva tanto id_externo como claves lógicas: así sirve con y sin migración
+  let { data, error } = await supabase
     .from('ofertas')
-    .select('id_oferta,comercializadora,nombre,vigencia_desde,fuente')
+    .select('id_oferta,id_externo,comercializadora,nombre,vigencia_desde,fuente')
     .eq('activo', true)
+
+  if (error) {
+    ;({ data, error } = await supabase
+      .from('ofertas')
+      .select('id_oferta,comercializadora,nombre,vigencia_desde,fuente')
+      .eq('activo', true))
+  }
   if (error) throw error
 
   const sobrantes = (data || [])
     .filter((fila) => String(fila.fuente || '').startsWith('CNMC'))
-    .filter((fila) => !vigentes.has(claveOferta(fila)))
+    .filter((fila) => !(fila.id_externo && vigentes.has(fila.id_externo)) && !vigentes.has(claveOferta(fila)))
     .map((fila) => fila.id_oferta)
 
   if (sobrantes.length === 0) return 0
@@ -315,18 +323,26 @@ router.post('/catalogo/sincronizar', async (req, res, next) => {
     let usaCamposOpcionales = true
     let avisoMigracion = null
 
-    for (const { id, fila } of actualizadas) {
-      let cuerpo = { ...fila, actualizado_en: ahora, activo: true }
+    // Actualizar en bloque por clave primaria: 1 petición por cada 100 ofertas
+    const cuerposActualizados = actualizadas.map(({ id, fila }) => ({
+      ...fila,
+      id_oferta: id,
+      actualizado_en: ahora,
+      activo: true
+    }))
+
+    for (let i = 0; i < cuerposActualizados.length; i += 100) {
+      const lote = cuerposActualizados.slice(i, i + 100)
       let { error } = await supabase
         .from('ofertas')
-        .update(usaCamposOpcionales ? cuerpo : sinCamposOpcionales(cuerpo))
-        .eq('id_oferta', id)
+        .upsert(usaCamposOpcionales ? lote : lote.map(sinCamposOpcionales), { onConflict: 'id_oferta' })
 
       if (error && usaCamposOpcionales && faltaColumna(error)) {
         usaCamposOpcionales = false
         avisoMigracion = 'Ejecuta server/sql/13_ofertas_cnmc.sql para guardar id_externo, origen y descuentos'
-        cuerpo = sinCamposOpcionales(cuerpo)
-        ;({ error } = await supabase.from('ofertas').update(cuerpo).eq('id_oferta', id))
+        ;({ error } = await supabase
+          .from('ofertas')
+          .upsert(lote.map(sinCamposOpcionales), { onConflict: 'id_oferta' }))
       }
       if (error) throw error
     }
@@ -356,7 +372,7 @@ router.post('/catalogo/sincronizar', async (req, res, next) => {
     }
 
     // 3) Las que la CNMC ya no publica dejan de estar activas
-    const dadasDeBaja = await desactivarObsoletas(supabase, new Set(filas.map(claveOferta)))
+    const dadasDeBaja = await desactivarObsoletas(supabase, new Set(filas.flatMap((f) => [f.id_externo, claveOferta(f)])))
 
     res.json({
       data: {

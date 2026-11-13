@@ -11,9 +11,11 @@ ALTER TABLE ofertas
   ADD COLUMN IF NOT EXISTS descuento_energia  numeric DEFAULT 0,
   ADD COLUMN IF NOT EXISTS descuento_potencia numeric DEFAULT 0;
 
--- Clave natural para el upsert: dominio|nombre de la oferta|fecha de inicio
+-- Clave natural: dominio|nombre de la oferta|fecha de inicio.
+-- Índice único NO parcial: Postgres ya admite varios NULL, y PostgREST solo
+-- reconoce como ON CONFLICT los índices únicos completos.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ofertas_id_externo
-  ON ofertas (id_externo) WHERE id_externo IS NOT NULL;
+  ON ofertas (id_externo);
 
 CREATE INDEX IF NOT EXISTS idx_ofertas_origen ON ofertas (origen);
 
