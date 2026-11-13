@@ -274,3 +274,15 @@ Dos proyectos en Vercel conectados a este repositorio (`master` = producción):
 
 Cada push a `master` despliega ambos automáticamente. Las variables de entorno
 (`SUPABASE_*`, `OPENROUTER_API_KEY`, `VITE_API_URL`) están solo en Vercel.
+
+### Fuentes de datos del comparador
+
+| Fuente | Endpoint | Coste | Condiciones |
+|---|---|---|---|
+| Precios de mercado / PVPC | `apidatos.ree.es` y `api.esios.ree.es/indicators/1001` | gratis | Sin token |
+| Ofertas de comercializadoras | `comparador.cnmc.gob.es/api/APIPublica/ofertas?fecha=dd/MM/yyyy` | gratis | Uso libre **con mención obligatoria a la CNMC** |
+
+El catálogo se sincroniza con el botón «↻ Sincronizar CNMC» del comparador.
+Las ofertas que la CNMC deja de publicar se desactivan automáticamente (no se borran).
+`sql/13_ofertas_cnmc.sql` es opcional: añade `id_externo`, `origen`, `web_oferta` y
+los descuentos publicados. Sin esa migración todo funciona igual.

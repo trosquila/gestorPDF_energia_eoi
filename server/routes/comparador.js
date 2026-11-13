@@ -2,6 +2,7 @@ import express from 'express'
 import { getSupabaseClient, getClienteById } from '../lib/supabase.js'
 import { preciosDelDia, mediaPorPeriodo2_0TD } from '../lib/precios.js'
 import { consultarAsistente } from '../lib/asistente.js'
+import { descargarOfertas, mapearCatalogo, ATRIBUCION_CNMC } from '../lib/cnmc.js'
 import {
   costeDeOferta,
   mapaPeriodos,
@@ -89,11 +90,12 @@ router.get('/fuentes', async (req, res, next) => {
         },
         {
           id: 'cnmc',
-          nombre: 'Comparador de la CNMC',
-          proveedor: 'comparadorofertasenergia.cnmc.es',
-          disponible: false,
+          nombre: 'Comparador de la CNMC (API pública)',
+          proveedor: 'comparador.cnmc.gob.es · /api/APIPublica/ofertas',
+          disponible: !error,
           coste: 'gratis',
-          nota: 'Sin API pública: redirige y no permite consulta automática. Se usa como referencia, no como fuente.'
+          nota: 'Ofertas oficiales de todas las comercializadoras, actualizables por fecha. ' +
+            'Uso libre con mención obligatoria a la CNMC.'
         }
       ]
     })
@@ -214,7 +216,209 @@ router.delete('/ofertas/:id', async (req, res, next) => {
   }
 })
 
-// === Simulación ===
+// === Catálogo oficial: sincronización con la API de la CNMC ===
+// Columnas que solo existen si se ha ejecutado sql/13_ofertas_cnmc.sql
+const CAMPOS_OPCIONALES = ['id_externo', 'origen', 'web_oferta', 'tipo_plan', 'descuento_energia', 'descuento_potencia']
+
+function sinCamposOpcionales(fila) {
+  const copia = { ...fila }
+  for (const campo of CAMPOS_OPCIONALES) delete copia[campo]
+  return copia
+}
+
+function faltaColumna(error) {
+  const mensaje = String(error?.message || '')
+  return error?.code === 'PGRST204' || /column .* does not exist|Could not find the .* column/i.test(mensaje)
+}
+
+/** Clave lógica de una oferta: la misma comercializadora+nombre+fecha es la misma oferta. */
+function claveOferta(oferta) {
+  return [
+    String(oferta.comercializadora || '').trim().toLowerCase(),
+    String(oferta.nombre || '').trim().toLowerCase(),
+    oferta.vigencia_desde || ''
+  ].join('|')
+}
+
+async function desactivarObsoletas(supabase, vigentes) {
+  const { data, error } = await supabase
+    .from('ofertas')
+    .select('id_oferta,comercializadora,nombre,vigencia_desde,fuente')
+    .eq('activo', true)
+  if (error) throw error
+
+  const sobrantes = (data || [])
+    .filter((fila) => String(fila.fuente || '').startsWith('CNMC'))
+    .filter((fila) => !vigentes.has(claveOferta(fila)))
+    .map((fila) => fila.id_oferta)
+
+  if (sobrantes.length === 0) return 0
+  const { error: errorBaja } = await supabase
+    .from('ofertas')
+    .update({ activo: false, actualizado_en: new Date().toISOString() })
+    .in('id_oferta', sobrantes)
+  if (errorBaja) throw errorBaja
+  return sobrantes.length
+}
+
+router.post('/catalogo/sincronizar', async (req, res, next) => {
+  try {
+    const { fecha } = req.body || {}
+    let fechaConsulta = new Date()
+    if (fecha) {
+      const texto = String(fecha).trim()
+      const española = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+      fechaConsulta = española
+        ? new Date(Date.UTC(Number(española[3]), Number(española[2]) - 1, Number(española[1])))
+        : new Date(texto)
+      if (Number.isNaN(fechaConsulta.getTime())) {
+        return res.status(400).json({ error: 'Fecha no válida. Usa dd/MM/yyyy o yyyy-mm-dd' })
+      }
+    }
+
+    const descarga = await descargarOfertas(fechaConsulta)
+    const { filas, descartadas } = mapearCatalogo(descarga.ofertas)
+
+    if (filas.length === 0) {
+      return res.status(502).json({
+        error: 'La CNMC no devolvió ofertas utilizables para esa fecha',
+        fecha: descarga.fecha
+      })
+    }
+
+    const supabase = getSupabaseClient(true)
+    const ahora = new Date().toISOString()
+
+    // 1) Qué hay ya en el catálogo, para actualizar en vez de duplicar
+    const { data: existentes, error: errorExistentes } = await supabase
+      .from('ofertas')
+      .select('id_oferta,comercializadora,nombre,vigencia_desde,fuente')
+    if (errorExistentes) {
+      if (faltaTablaOfertas(errorExistentes)) {
+        return res.status(503).json({ error: 'Falta ejecutar server/sql/12_ofertas.sql' })
+      }
+      throw errorExistentes
+    }
+
+    const porClave = new Map()
+    for (const fila of existentes || []) porClave.set(claveOferta(fila), fila.id_oferta)
+
+    // 2) Actualizar las que ya están, insertar las nuevas
+    const nuevas = []
+    const actualizadas = []
+    for (const fila of filas) {
+      const id = porClave.get(claveOferta(fila))
+      if (id) actualizadas.push({ id, fila })
+      else nuevas.push(fila)
+    }
+
+    let usaCamposOpcionales = true
+    let avisoMigracion = null
+
+    for (const { id, fila } of actualizadas) {
+      let cuerpo = { ...fila, actualizado_en: ahora, activo: true }
+      let { error } = await supabase
+        .from('ofertas')
+        .update(usaCamposOpcionales ? cuerpo : sinCamposOpcionales(cuerpo))
+        .eq('id_oferta', id)
+
+      if (error && usaCamposOpcionales && faltaColumna(error)) {
+        usaCamposOpcionales = false
+        avisoMigracion = 'Ejecuta server/sql/13_ofertas_cnmc.sql para guardar id_externo, origen y descuentos'
+        cuerpo = sinCamposOpcionales(cuerpo)
+        ;({ error } = await supabase.from('ofertas').update(cuerpo).eq('id_oferta', id))
+      }
+      if (error) throw error
+    }
+
+    let insertadas = 0
+    for (let i = 0; i < nuevas.length; i += 100) {
+      const lote = nuevas.slice(i, i + 100).map((fila) => ({
+        ...fila,
+        actualizado_en: ahora
+      }))
+      let { error } = await supabase
+        .from('ofertas')
+        .insert(usaCamposOpcionales ? lote : lote.map(sinCamposOpcionales))
+
+      if (error && usaCamposOpcionales && faltaColumna(error)) {
+        usaCamposOpcionales = false
+        avisoMigracion = 'Ejecuta server/sql/13_ofertas_cnmc.sql para guardar id_externo, origen y descuentos'
+        ;({ error } = await supabase.from('ofertas').insert(lote.map(sinCamposOpcionales)))
+      }
+      if (error) {
+        if (faltaTablaOfertas(error)) {
+          return res.status(503).json({ error: 'Falta ejecutar server/sql/12_ofertas.sql' })
+        }
+        throw error
+      }
+      insertadas += lote.length
+    }
+
+    // 3) Las que la CNMC ya no publica dejan de estar activas
+    const dadasDeBaja = await desactivarObsoletas(supabase, new Set(filas.map(claveOferta)))
+
+    res.json({
+      data: {
+        fecha_consulta: descarga.fecha,
+        url: descarga.url,
+        ofertas_recibidas: descarga.ofertas.length,
+        ofertas_guardadas: insertadas + actualizadas.length,
+        nuevas: insertadas,
+        actualizadas: actualizadas.length,
+        desactivadas: dadasDeBaja,
+        descartadas,
+        comercializadoras: [...new Set(filas.map((f) => f.comercializadora))].length,
+        aviso_migracion: avisoMigracion,
+        atribucion: ATRIBUCION_CNMC
+      }
+    })
+  } catch (error) {
+    if (faltaTablaOfertas(error)) {
+      return res.status(503).json({ error: 'Falta ejecutar server/sql/12_ofertas.sql' })
+    }
+    res.status(502).json({ error: error.message })
+  }
+})
+
+router.get('/catalogo/estado', async (req, res, next) => {
+  try {
+    const supabase = getSupabaseClient(true)
+    const { data, error } = await supabase
+      .from('ofertas')
+      .select('activo,actualizado_en,comercializadora,fuente')
+      .order('actualizado_en', { ascending: false })
+    if (error) {
+      if (faltaTablaOfertas(error)) {
+        return res.status(503).json({ error: 'Falta ejecutar server/sql/12_ofertas.sql' })
+      }
+      throw error
+    }
+
+    const filas = data || []
+    const activas = filas.filter((f) => f.activo !== false)
+    res.json({
+      data: {
+        total: filas.length,
+        activas: activas.length,
+        por_origen: activas.reduce((acc, f) => {
+          const clave = String(f.fuente || '').startsWith('CNMC') ? 'cnmc' : 'manual'
+          acc[clave] = (acc[clave] || 0) + 1
+          return acc
+        }, {}),
+        comercializadoras: [...new Set(activas.map((f) => f.comercializadora))].sort((a, b) =>
+          String(a).localeCompare(String(b), 'es')
+        ).length,
+        actualizado_en: filas[0]?.actualizado_en || null,
+        atribucion: ATRIBUCION_CNMC
+      }
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// === Simulación
 router.post('/simular', async (req, res, next) => {
   try {
     const {

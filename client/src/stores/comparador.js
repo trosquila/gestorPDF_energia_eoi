@@ -51,6 +51,36 @@ export const useComparadorStore = defineStore('comparador', () => {
     }
   }
 
+  // Catálogo oficial de la CNMC
+  const estadoCatalogo = ref(null)
+  const sincronizando = ref(false)
+  const resumenSync = ref(null)
+
+  async function cargarEstadoCatalogo() {
+    try {
+      const r = await comparadorApi.estadoCatalogo()
+      estadoCatalogo.value = r.data.data || r.data
+    } catch (e) {
+      estadoCatalogo.value = null
+    }
+  }
+
+  async function sincronizarCatalogo(fecha) {
+    sincronizando.value = true
+    error.value = null
+    try {
+      const r = await comparadorApi.sincronizarCatalogo(fecha)
+      resumenSync.value = r.data.data || r.data
+      await Promise.all([cargarOfertas(), cargarEstadoCatalogo()])
+      return resumenSync.value
+    } catch (e) {
+      error.value = mensaje(e)
+      throw e
+    } finally {
+      sincronizando.value = false
+    }
+  }
+
   async function crearOferta(datos) {
     const r = await comparadorApi.crearOferta(datos)
     const nueva = r.data.data || r.data
@@ -107,6 +137,11 @@ export const useComparadorStore = defineStore('comparador', () => {
     resultado,
     asistente,
     loading,
+    estadoCatalogo,
+    sincronizando,
+    resumenSync,
+    cargarEstadoCatalogo,
+    sincronizarCatalogo,
     error,
     cargarFuentes,
     cargarPrecios,

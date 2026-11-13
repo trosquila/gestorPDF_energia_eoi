@@ -232,6 +232,13 @@
       <div class="card-header">
         <h3>Catálogo de ofertas ({{ comparador.ofertas.length }})</h3>
         <div class="cabecera-catalogo">
+          <button
+            class="btn btn-primary btn-sm"
+            :disabled="comparador.sincronizando"
+            title="Descarga las ofertas oficiales del Comparador de la CNMC"
+            @click="sincronizarCnmc">
+            {{ comparador.sincronizando ? 'Sincronizando…' : '↻ Sincronizar CNMC' }}
+          </button>
           <input ref="inputCsv" type="file" accept=".csv,text/csv" class="oculto" @change="importarCsv" />
           <button class="btn btn-secondary btn-sm" @click="inputCsv?.click()" :disabled="importando">
             {{ importando ? 'Importando…' : 'Importar CSV' }}
@@ -288,12 +295,23 @@
         </div>
       </div>
 
-      <div class="card-body" v-if="resumenImportacion || errorOferta">
+      <div class="card-body" v-if="resumenImportacion || errorOferta || comparador.resumenSync">
         <p v-if="resumenImportacion" class="resumen-importacion">{{ resumenImportacion }}</p>
+        <p v-if="comparador.resumenSync" class="resumen-importacion">
+          CNMC ({{ comparador.resumenSync.fecha_consulta }}):
+          {{ comparador.resumenSync.ofertas_recibidas }} ofertas recibidas ·
+          <strong>{{ comparador.resumenSync.nuevas }} nuevas</strong>,
+          {{ comparador.resumenSync.actualizadas }} actualizadas,
+          {{ comparador.resumenSync.desactivadas }} retiradas ·
+          {{ comparador.resumenSync.descartadas.solo_gas }} de gas ignoradas
+        </p>
+        <p v-if="comparador.resumenSync?.aviso_migracion" class="resumen-importacion">
+          {{ comparador.resumenSync.aviso_migracion }}
+        </p>
         <p v-if="errorOferta" class="aviso-error">{{ errorOferta }}</p>
       </div>
 
-      <div class="card-body" v-if="comparador.ofertas.length > 0">
+      <div class="card-body" v-if="comparador.ofertas.length > 0" style="padding-bottom:0">
         <div class="table-container">
           <table>
             <thead>
@@ -313,6 +331,18 @@
             </tbody>
           </table>
         </div>
+      </div>
+
+      <!-- Atribución obligatoria mientras se usen datos de la CNMC -->
+      <div class="card-body atribucion-cnmc" v-if="comparador.estadoCatalogo">
+        <p class="nota-atribucion">
+          {{ comparador.estadoCatalogo.atribucion }} ·
+          <strong>{{ comparador.estadoCatalogo.activas }}</strong> ofertas activas de
+          {{ comparador.estadoCatalogo.comercializadoras }} comercializadoras.
+          <span v-if="comparador.estadoCatalogo.actualizado_en">
+            Última actualización: {{ fechaCorta(comparador.estadoCatalogo.actualizado_en) }}
+          </span>
+        </p>
       </div>
     </div>
   </div>
@@ -534,11 +564,30 @@ async function borrarOferta(oferta) {
   await comparador.eliminarOferta(oferta.id_oferta)
 }
 
+/** Pide a la CNMC su catálogo oficial y lo guarda en la base de datos. */
+async function sincronizarCnmc() {
+  errorOferta.value = null
+  resumenImportacion.value = null
+  try {
+    await comparador.sincronizarCatalogo()
+  } catch (e) {
+    errorOferta.value = e.response?.data?.error || e.message
+  }
+}
+
+function fechaCorta(valor) {
+  if (!valor) return ''
+  return new Date(valor).toLocaleString('es-ES', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  })
+}
+
 onMounted(async () => {
   await Promise.all([
     comparador.cargarFuentes(),
     comparador.cargarPrecios(),
-    comparador.cargarOfertas()
+    comparador.cargarOfertas(),
+    comparador.cargarEstadoCatalogo()
   ])
 
   // Facturas que ya tienen consumo por periodo
@@ -733,4 +782,18 @@ onMounted(async () => {
 .cabecera-catalogo { display: flex; gap: 0.5rem; }
 .oculto { display: none; }
 .resumen-importacion { font-size: 0.8125rem; color: var(--color-success); font-weight: 500; }
+.atribucion-cnmc {
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.nota-atribucion {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
 </style>
