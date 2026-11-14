@@ -78,6 +78,8 @@ control-energia/
 │   │   ├── analitica.js      # resumen y analítica de energía
 │   │   ├── comparador.js     # precios, ofertas, simulación, asistente
 │   │   └── ejemplos.js       # datos de ejemplo (desarrollo)
+│   ├── scripts/
+│   │   └── seed-dev.js       # generador determinista de facturas de prueba
 │   ├── sql/                  # migraciones 02..13 (se ejecutan a mano en Supabase)
 │   └── vercel.json
 ├── client/
@@ -85,8 +87,9 @@ control-energia/
 │   │   ├── main.js, App.vue, router/index.js
 │   │   ├── services/api.js   # axios + todos los endpoints
 │   │   ├── stores/           # auth, facturas, clientes, comparador, solicitudes, historial
+│   │   ├── composables/usePaginacion.js  # estado de página reutilizable
 │   │   ├── views/            # una página por ruta
-│   │   ├── components/       # factura/ y analitica/
+│   │   ├── components/       # factura/, analitica/ y PaginacionBar.vue
 │   │   └── utils/factura.js  # esImagenDe(), urlDelArchivo()
 │   └── vercel.json
 ├── docs/                     # guía de estilos, informe del comparador
@@ -191,6 +194,45 @@ potencia van en **€/kW/año** y los de energía en **€/kWh**.
 `vigencia_hasta`, `fuente`, `activo`, y tras la 13: `id_externo` (único),
 `origen` (manual|cnmc), `web_oferta`, `tipo_plan`, `descuento_energia`,
 `descuento_potencia`.
+
+### Datos de prueba — `scripts/seed-dev.js`
+
+Genera 101 facturas de tres suministros completos para poder desarrollar la
+analítica y el comparador sin depender de facturas reales. **No es una migración**
+y no se ejecuta sola: es un script de desarrollo.
+
+| Suministro | CUPS | Perfil |
+|---|---|---|
+| hogar | `ESSEED…001` | Salamanca, 2.0TD, 5,75/4,60 kW, excedentes en verano |
+| pyme | `ESSEED…002` | Murcia, 3.0TD (P1…P6, 12/9 kW) |
+| industria | `ESSEED…003` | Valencia, 6.1TD (75/60 kW) |
+
+```bash
+cd server
+npm run seed            # simulación: imprime resumen y 1 factura, no escribe
+npm run seed:aplicar    # borra las SEED y las reinserta (idempotente)
+npm run seed:limpiar    # borra facturas ESSEED% y clientes DEMO %
+```
+
+Decisiones que importan si se toca el generador:
+
+- **Determinista** (`mulberry32` con semilla fija): dos ejecuciones dan las
+  mismas cifras, así que los números de una prueba son comparables entre días.
+- **Coherente**: el reparto por periodo suma exactamente `consumo_total_kwh` y el
+  desglose se recalcula con la fórmula de `lib/coste.js`. El script valida las
+  101 filas antes de escribir y aborta si algo no cuadra; un seed incoherente
+  hace que la analítica pinte una dona que miente.
+- **Casos límite incluidos**: anomalías interanuales (+39 % en marzo 2026 del
+  hogar, +54 % en agosto 2025 de la pyme), una lectura `estimada`, un mes
+  ausente, una factura con `activo = false` y facturas en `revisión`.
+- **Etiquetado y reversible**: todo lo generado lleva `cups LIKE 'ESSEED%'`,
+  `id_contrato 'SEED-…'`, `num_factura 'SEED-…'` y clientes `DEMO …`. Es lo
+  único que borra `seed:limpiar`; el catálogo de ofertas no se toca nunca.
+- **Sin PDF**: `ruta_pdf` queda a `null`, así que esas filas aparecen en el aviso
+  «sin documento guardado». Es correcto: no hay archivo.
+
+No debe usarse para conclusiones reales: es una serie sintética. En la entrega,
+los gráficos que salgan de ella se presentan como tales.
 
 ## 6. Flujo de subida de una factura
 
@@ -459,6 +501,55 @@ defensa contra tarifas inventadas.
   `/lote/:otro` reutiliza el componente y no dispara `leave`).
   `EnergiaPanel` recibe los filtros como prop y recarga al cambiarlos.
 
+### Paginación — `composables/usePaginacion.js` + `components/PaginacionBar.vue`
+
+Las listas se paginan **en el cliente**: la API devuelve la colección completa
+(vacía o con ~150 filas de catálogo) y el componente corta la página. El
+composable devuelve `visibles`, `props` (para `v-bind` en la barra), `irA` y
+`definirTamano`:
+
+```js
+const { visibles, props, irA, definirTamano } =
+  usePaginacion(facturasFiltradas, { porPagina: 25 })
+```
+
+```vue
+<tr v-for="f in visibles" :key="f.id_factura">…</tr>
+<PaginacionBar v-bind="props" @update:pagina="irA" @update:porPagina="definirTamano" />
+```
+
+Reglas que no son obvias y conviene no romper:
+
+- **Al cambiar la fuente vuelve a la página 1.** Sin esto, filtras desde la
+  página 4 y ves una lista vacía que parece un fallo.
+- **Si el total cabe en una página, la barra no se pinta** (`total > min(opciones)`):
+  un «1–4 de 4» es ruido, no paginación.
+- **Cada vista elige el tamaño**: 25 facturas, clientes y solicitudes; 15 catálogo
+  de ofertas; 10 ranking de simulación y tablas de analítica.
+- La paginación va **fuera** del `.table-container`; dentro se desplazaría con la
+  tabla y quedaría recortada.
+
+### Layout, scroll y cabecera
+
+- **Nada de barras internas.** `.table-container` conserva `overflow-x: auto` como
+  red de seguridad pero la barra está oculta (`scrollbar-width: none` y
+  `::-webkit-scrollbar` a 0): si una tabla no cabe, el problema se resuelve
+  reordenando columnas, no enseñando una barra.
+- **Tabla de lote**: 7 columnas (factura+fecha, comercializadora, CUPS, consumo,
+  importe, extracción con estado/método/confianza y acciones). Con 10 columnas
+  desbordaba 28 px. En pantallas estrechas se ocultan `.col-cups` (<1024 px) y
+  `.col-com` (<820 px) en vez de dejar que empuje.
+- **Sin paneles con scroll propio**: `.fields-panel` y `.table-container.compact`
+  ya no tienen `max-height`; la página entera se desplaza.
+- **Cabecera**: `.header-content` usa `min-height` y `flex-wrap` (antes `height:
+  64px` fijo) y el `.nav` **no** lleva `overflow`. Cualquier `overflow` en el nav
+  crea un contexto que recorta los hijos posicionados.
+- **Menú de usuario**: se dibuja con `<Teleport to="body">` y `position: fixed`,
+  con `top/left` calculados desde el botón al abrir (`colocarMenu()`). Se
+  recalcula al redimensionar y se cierra con clic fuera, `Escape` o scroll. La
+  causa del bug original: `.nav` tenía `overflow-x: auto` y recortaba el
+  desplegable a 3 px.
+
 ## 13. Despliegue (Vercel)
 
 Dos proyectos del mismo repositorio, con **Root Directory** distinto:
@@ -479,6 +570,22 @@ Dos proyectos del mismo repositorio, con **Root Directory** distinto:
   `OPENROUTER_API_KEY`, `SUPABASE_BUCKET`, `NODE_ENV=production`) y `VITE_API_URL`
   en el del front.
 - **Integración Git activa**: cada push a `master` despliega los dos proyectos.
+
+Si el push genera un deployment `READY` pero el dominio sigue sirviendo el bundle
+anterior, se fuerza desde la **raíz del repositorio** (el proyecto tiene
+`Root Directory = client`, así que desplegar desde `client/` falla con
+«The specified Root Directory "client" does not exist»):
+
+```bash
+cp -r client/.vercel .vercel
+npx vercel deploy --prod --yes
+rm -rf .vercel          # no se sube al repo
+```
+
+Comprobar que lo desplegado es lo nuevo, sin mirar la pantalla: el `index.html`
+de producción referencia un `assets/index-<hash>.js`; ese hash debe coincidir con
+el de `client/dist/index.html` y los chunks deben contener el código del último
+commit (por ejemplo `assets/PaginacionBar-*.js`).
 
 Producción:
 `https://gestorpdf-energia-api.vercel.app` · `https://gestorpdf-energia-web.vercel.app`
@@ -521,3 +628,6 @@ Local: `node api/index.js` en `server/` (puerto 3000) y
 | Sincronización | Manual desde la UI; un cron necesitaría un `GET` con token porque los crons de Vercel no hacen POST |
 | Bajas | Facturas y clientes se dan de baja **lógicamente**; un cliente con facturas activas no se puede borrar (409) |
 | Migraciones | Manuales en el editor SQL de Supabase; la API avisa si falta alguna (`falta_migracion`) |
+| Paginación | **En el cliente**: la API devuelve la colección entera. Con miles de facturas habría que moverla al servidor (`limit`/`offset` + `count`) para no descargar todo |
+| Cambiar contraseña | El backend (`POST /api/usuarios/change-password`) existe; la ventana en la interfaz está pendiente (el botón avisa) |
+| Datos de prueba | `npm run seed` inserta 101 facturas sintéticas etiquetadas (`ESSEED…`, `DEMO …`); `seed:limpiar` las borra |

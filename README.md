@@ -26,6 +26,9 @@ ofertas de todas las comercializadoras españolas.
 - **Comparador**: perfil de consumo → ranking de ofertas + PVPC estimado, con
   catálogo oficial de la CNMC, alta manual, importación CSV y asistente de IA.
 - **Clientes y solicitudes**: CRUD de clientes (admin) y aprobación de registros.
+- **Listados paginados**: todas las tablas largas (facturas, clientes, catálogo,
+  ranking, analítica) van por páginas de 10, 15 o 25 filas, sin barras de
+  desplazamiento dentro de la página.
 
 ## Stack
 
@@ -57,6 +60,21 @@ node node_modules/vite/bin/vite.js   # http://localhost:5173
 Las migraciones de `server/sql/` se ejecutan **a mano** en el editor SQL de
 Supabase, en orden (02 → 13).
 
+### Datos de prueba (opcional)
+
+Para trabajar con datos sin depender de facturas reales:
+
+```bash
+cd server
+npm run seed            # simula: 101 facturas, no escribe nada
+npm run seed:aplicar    # las inserta (borra y reinserta las SEED)
+npm run seed:limpiar    # las borra y deja la base como estaba
+```
+
+Genera tres suministros completos (2.0TD hogar, 3.0TD pyme, 6.1TD industria) con
+34 meses cada uno, anomalías, una lectura estimada, un mes ausente y una baja.
+Es determinista y todo queda etiquetado (`CUPS ESSEED…`, clientes `DEMO …`).
+
 ## Producción
 
 | Proyecto | Carpeta raíz | URL |
@@ -66,6 +84,16 @@ Supabase, en orden (02 → 13).
 
 Los dos están conectados al repositorio: **cada push a `master` despliega ambos**.
 Las variables de entorno viven solo en Vercel.
+
+Si tras un push el dominio sigue sirviendo el bundle anterior, se fuerza desde la
+**raíz del repositorio** (no desde `client/`, porque el proyecto tiene
+`Root Directory = client`):
+
+```bash
+cp -r client/.vercel .vercel     # el proyecto ya está enlazado
+npx vercel deploy --prod --yes
+rm -rf .vercel
+```
 
 ## Fuentes de datos y licencias
 

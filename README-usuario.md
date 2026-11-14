@@ -33,8 +33,15 @@ administrador.
 
 ### Cambiar la contraseña
 
-Menú de usuario (arriba a la derecha) → **Cambiar contraseña**. Te pedirá la
-actual y la nueva (mínimo 8 caracteres).
+Menú de usuario (arriba a la derecha) → **Cambiar contraseña**.
+
+> Ahora mismo ese botón todavía no abre el formulario: la API ya tiene el
+> endpoint (`POST /api/usuarios/change-password`) pero falta la ventana en la
+> interfaz. Mientras tanto, un administrador puede cambiarla desde Supabase.
+
+El menú de usuario se abre siempre por encima del contenido: muestra tu correo,
+tu rol y las dos acciones (cambiar contraseña y cerrar sesión). Se cierra con
+**Escape**, haciendo clic fuera o al desplazar la página.
 
 ---
 
@@ -109,13 +116,26 @@ Si intentas salir con cambios sin guardar, la aplicación te avisa y te deja
 ## 4. Lote y exploración
 
 Menú **Lote**. Es el listado completo de facturas con filtros por
-comercializadora, estado y rango de fechas, más un buscador.
+comercializadora, estado y rango de fechas.
 
 - Pulsa **Ver** en una fila para abrir su ficha.
 - Dentro de la ficha abierta desde el lote tienes **← Anterior** y **Siguiente →**
   para recorrer las facturas del filtro sin volver al listado, con un contador
   «3 de 27».
 - **Volver al lote** te devuelve al listado con los mismos filtros.
+
+### Paginación
+
+La tabla muestra **25 facturas por página**. Debajo tienes el resumen
+(«1–25 de 99»), el selector de tamaño (10, 25, 50 o 100) y los botones de página
+con **‹ ›** para ir de una en una.
+
+- Al cambiar cualquier filtro se vuelve a la **primera página**: nunca te quedas
+  mirando una página vacía después de filtrar.
+- Si el resultado cabe entero, la barra no aparece.
+- En pantallas estrechas se ocultan las columnas **CUPS** (menos de 1024 px) y
+  **Comercializadora** (menos de 820 px) para que la tabla no se salga; el dato
+  completo sigue en la ficha.
 
 Las facturas dadas de baja no aparecen en el listado.
 
@@ -140,7 +160,8 @@ pagado. Sirve para ver si el precio sube aunque el consumo no cambie.
 
 Dona con el reparto medio de una factura: energía, peajes y cargos, impuestos e
 IVA, alquiler del contador y otros servicios. Al lado, tabla de gasto por
-comercializadora y, si hay varias provincias, por provincia.
+comercializadora y, si hay varias provincias, por provincia. Cada tabla va
+paginada de **10 en 10** cuando tiene más filas que eso.
 
 Necesita que las facturas tengan relleno el desglose económico; si no, te lo dice.
 
@@ -148,7 +169,7 @@ Necesita que las facturas tengan relleno el desglose económico; si no, te lo di
 
 - Reparto del consumo por periodo (P1, P2, P3) con porcentajes.
 - **Tabla de sobrecontratación**: contratada frente a máxima demandada, exceso en
-  kW y ahorro anual estimado.
+  kW y ahorro anual estimado (10 filas por página, con el contador de totales).
 - **Ahorro potencial**: compara tus facturas con la mejor oferta del catálogo.
 - **Cobertura**: cuántas facturas tienen periodos, potencias y excedentes.
 
@@ -184,6 +205,8 @@ Verás:
 - **PVPC estimado** con el precio medio de los últimos 30 días.
 - **Ranking de ofertas** ordenado de más barata a más cara, con el desglose de
   potencia, energía, impuestos y total, y el ahorro frente a la factura actual.
+  Se muestran **10 por página** (arriba están las mejores: la primera fila es la
+  recomendación).
 
 ### Catálogo de ofertas
 
@@ -195,6 +218,10 @@ El catálogo se llena con las **ofertas oficiales del Comparador de la CNMC**.
 - **+ Añadir oferta**: alta manual de una tarifa concreta.
 - **Importar CSV**: carga varias ofertas de golpe.
 - **Quitar**: desactiva una oferta del catálogo (no se borra).
+
+El catálogo se lista de **15 en 15**: con el volcado de la CNMC son unas 150
+ofertas, así que usa el buscador del navegador o pasa de página para encontrar
+una comercializadora concreta.
 
 Debajo del catálogo aparece la nota de atribución: es **obligatoria** porque los
 datos son de la CNMC.
@@ -223,6 +250,9 @@ Menú **Clientes**.
   y te dice cuántas son. Primero reasigna o da de baja esas facturas.
 - **Reactivar** un cliente dado de baja.
 
+La tabla va de **25 en 25**. **Exportar CSV** descarga **todo** lo que cumple el
+filtro y la búsqueda, no solo la página que estás viendo.
+
 La baja es lógica: el cliente deja de listarse pero sus datos se conservan.
 
 ---
@@ -231,7 +261,8 @@ La baja es lógica: el cliente deja de listarse pero sus datos se conservan.
 
 Menú **Solicitudes**.
 
-- Lista de altas pendientes con nombre, correo y rol solicitado.
+- Lista de altas pendientes con nombre, correo y rol solicitado, paginada de
+  **25 en 25**.
 - **Aprobar**: crea el usuario y ya puede entrar con la contraseña que eligió.
 - **Rechazar**: puedes añadir un motivo; si lo escribes, la persona lo verá al intentar entrar.
 
@@ -251,6 +282,9 @@ El número rojo en el menú indica cuántas hay pendientes.
 | «No hay ofertas en el catálogo que se puedan comparar» | Pulsa **↻ Sincronizar CNMC** |
 | El gráfico de evolución sale vacío | Las facturas no tienen fecha; revisa el rango de filtros |
 | La sobrecontratación no aparece | Faltan potencias contratada y máxima en las facturas |
+| No veo la columna CUPS (o la comercializadora) | La ventana es estrecha: por debajo de 1024 px se ocultan para que la tabla quepa. Abre la ficha de la factura, ahí está el CUPS |
+| No veo una factura que sé que existe | Está en otra página del listado, o el filtro la excluye. Mira el resumen «x–y de N» debajo de la tabla |
+| «Cambiar contraseña» no hace nada | Todavía no está la ventana en la interfaz; pide a un administrador que la cambie |
 
 ---
 
@@ -266,3 +300,7 @@ Los precios de mercado y el PVPC provienen de **Red Eléctrica de España**
 
 Tus facturas y los archivos originales se guardan en un almacenamiento privado:
 no hay URL pública de los documentos.
+
+En un entorno de pruebas la base puede contener además **datos sintéticos**
+(clientes `DEMO …` y CUPS que empiezan por `ESSEED`), generados para probar la
+aplicación. Son inventados y se borran con `npm run seed:limpiar` desde `server/`.
