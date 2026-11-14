@@ -82,18 +82,25 @@ Es determinista y todo queda etiquetado (`CUPS ESSEED…`, clientes `DEMO …`).
 | `gestorpdf-energia-api` | `server/` | https://gestorpdf-energia-api.vercel.app |
 | `gestorpdf-energia-web` | `client/` | https://gestorpdf-energia-web.vercel.app |
 
-Los dos están conectados al repositorio: **cada push a `master` despliega ambos**.
-Las variables de entorno viven solo en Vercel.
-
-Si tras un push el dominio sigue sirviendo el bundle anterior, se fuerza desde la
-**raíz del repositorio** (no desde `client/`, porque el proyecto tiene
-`Root Directory = client`):
+Los dos están conectados al repositorio: cada push a `master` lanza un despliegue
+automático. **Ojo:** en la práctica ese despliegue automático ha construido un
+estado antiguo del repositorio (el dominio volvía al bundle de días atrás), así
+que el despliegue fiable es el manual desde la **raíz** del proyecto web. Las
+variables de entorno viven solo en Vercel.
 
 ```bash
 cp -r client/.vercel .vercel     # el proyecto ya está enlazado
 npx vercel deploy --prod --yes
-rm -rf .vercel
+rm -rf .vercel                   # no se sube al repo
 ```
+
+Desplegar desde `client/` falla con «The specified Root Directory "client" does
+not exist», porque el proyecto tiene `Root Directory = client` y el directorio
+que se sube ya es ese.
+
+Para comprobar qué hay publicado sin mirar la pantalla: el `index.html` de
+producción referencia un `assets/index-<hash>.js`; los chunks deben incluir el
+código del último commit (por ejemplo `assets/PaginacionBar-*.js`).
 
 ## Fuentes de datos y licencias
 

@@ -569,12 +569,14 @@ Dos proyectos del mismo repositorio, con **Root Directory** distinto:
 - Variables de entorno cargadas en el proyecto de la API (`SUPABASE_*`,
   `OPENROUTER_API_KEY`, `SUPABASE_BUCKET`, `NODE_ENV=production`) y `VITE_API_URL`
   en el del front.
-- **Integración Git activa**: cada push a `master` despliega los dos proyectos.
+- **Integración Git activa**: cada push a `master` lanza un despliegue.
 
-Si el push genera un deployment `READY` pero el dominio sigue sirviendo el bundle
-anterior, se fuerza desde la **raíz del repositorio** (el proyecto tiene
-`Root Directory = client`, así que desplegar desde `client/` falla con
-«The specified Root Directory "client" does not exist»):
+Aviso comprobado: ese despliegue automático ha llegado a construir un **estado
+antiguo** del repositorio (el dominio volvía al bundle de días anteriores, sin los
+últimos cambios). Hasta revisar en Vercel *Settings → Git* qué rama/commit usa
+como producción, el despliegue fiable es el manual desde la **raíz** del repo (el
+proyecto tiene `Root Directory = client`, así que desplegar desde `client/` falla
+con «The specified Root Directory "client" does not exist»):
 
 ```bash
 cp -r client/.vercel .vercel
