@@ -7,7 +7,10 @@
   "scripts": {
     "dev": "vercel dev",
     "start": "node api/index.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed": "node scripts/seed-dev.js",
+    "seed:aplicar": "node scripts/seed-dev.js --aplicar",
+    "seed:limpiar": "node scripts/seed-dev.js --limpiar"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.1.0",
