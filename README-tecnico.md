@@ -569,14 +569,12 @@ Dos proyectos del mismo repositorio, con **Root Directory** distinto:
 - Variables de entorno cargadas en el proyecto de la API (`SUPABASE_*`,
   `OPENROUTER_API_KEY`, `SUPABASE_BUCKET`, `NODE_ENV=production`) y `VITE_API_URL`
   en el del front.
-- **Integración Git activa**: cada push a `master` lanza un despliegue.
+- **Integración Git activa**: cada push a `master` despliega los dos proyectos
+  (comprobado en la API de Vercel: `source: git`, `sha` del último commit).
 
-Aviso comprobado: ese despliegue automático ha llegado a construir un **estado
-antiguo** del repositorio (el dominio volvía al bundle de días anteriores, sin los
-últimos cambios). Hasta revisar en Vercel *Settings → Git* qué rama/commit usa
-como producción, el despliegue fiable es el manual desde la **raíz** del repo (el
-proyecto tiene `Root Directory = client`, así que desplegar desde `client/` falla
-con «The specified Root Directory "client" does not exist»):
+Para forzar un despliegue a mano, desde la **raíz** del repo (el proyecto tiene
+`Root Directory = client`, así que desplegar desde `client/` falla con «The
+specified Root Directory "client" does not exist»):
 
 ```bash
 cp -r client/.vercel .vercel
@@ -584,10 +582,12 @@ npx vercel deploy --prod --yes
 rm -rf .vercel          # no se sube al repo
 ```
 
-Comprobar que lo desplegado es lo nuevo, sin mirar la pantalla: el `index.html`
-de producción referencia un `assets/index-<hash>.js`; ese hash debe coincidir con
-el de `client/dist/index.html` y los chunks deben contener el código del último
-commit (por ejemplo `assets/PaginacionBar-*.js`).
+**Cómo verificar qué hay publicado:** no compares el hash del bundle con el de
+`client/dist`. Vite mete en el bundle cosas del entorno (`VITE_API_URL`) y el hash
+cambia entre builds aunque el código sea el mismo. Comprueba el contenido: el
+`index.html` de producción referencia un `assets/index-<hash>.js`; descarga ese
+archivo, saca los chunks que importa y busca en ellos el código del último commit
+(`PaginacionBar-*.js`, `col-cups` en `LoteView-*.js`, etc.).
 
 Producción:
 `https://gestorpdf-energia-api.vercel.app` · `https://gestorpdf-energia-web.vercel.app`
