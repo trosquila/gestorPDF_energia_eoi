@@ -143,6 +143,7 @@ input, select, textarea {
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .badge-success {
@@ -197,7 +198,15 @@ input, select, textarea {
 }
 
 .table-container {
+  /* La tabla se adapta al ancho disponible; si aun así no cabe, se desplaza
+     sin pintar la barra gris del navegador (el scroll con rueda sigue). */
   overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.table-container::-webkit-scrollbar {
+  height: 0;
+  width: 0;
 }
 
 table {
@@ -206,9 +215,21 @@ table {
 }
 
 th, td {
-  padding: 0.75rem 1rem;
+  padding: 0.65rem 0.75rem;
   text-align: left;
   border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+td {
+  font-size: 0.875rem;
+}
+
+/* Identificadores largos (CUPS, números de factura): parten de línea en su
+   propia celda en vez de estirar la tabla. El resto del texto no se rompe. */
+.celda-identificador {
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }
 
 th {
@@ -218,6 +239,7 @@ th {
   letter-spacing: 0.05em;
   color: var(--color-text-muted);
   background-color: var(--color-bg);
+  white-space: nowrap;
 }
 
 tr:hover td {
@@ -257,7 +279,8 @@ tr:hover td {
 }
 
 .metric-value {
-  font-size: 2rem;
+  /* En tarjetas estrechas (4 columnas a 900 px) el importe se salía de la card */
+  font-size: clamp(1.35rem, 2.4vw, 2rem);
   font-weight: 700;
   color: var(--color-text);
 }
@@ -270,11 +293,11 @@ tr:hover td {
 
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--color-border);
   margin-bottom: 1.5rem;
-  /* Con muchas pestañas se desplaza en horizontal en vez de partir el texto */
-  overflow-x: auto;
-  scrollbar-width: thin;
+  /* Sin overflow: las pestañas se reparten en varias líneas antes que enseñar
+     una barra de desplazamiento dentro de la propia página. */
 }
 
 .tab {
@@ -519,9 +542,11 @@ tr:hover td {
   font-size: 0.8125rem;
 }
 
+/* Las tablas compactas de la ficha crecen con el contenido: antes tenían
+   300 px de alto y su propia barra, que es justo lo que molestaba. */
 .table-container.compact {
-  max-height: 300px;
-  overflow-y: auto;
+  max-height: none;
+  overflow: visible;
 }
 
 .table-container.compact th,

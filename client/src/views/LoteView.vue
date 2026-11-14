@@ -74,41 +74,38 @@
           <table>
             <thead>
               <tr>
-                <th>N° Factura</th>
-                <th>Fecha</th>
-                <th>Comercializadora</th>
-                <th>CUPS</th>
+                <th>Factura</th>
+                <th class="col-com">Comercializadora</th>
+                <th class="col-cups">CUPS</th>
                 <th>Consumo (kWh)</th>
                 <th>Importe (€)</th>
-                <th>Estado</th>
-                <th>Método</th>
-                <th>Confianza</th>
+                <th>Extracción</th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="factura in facturasFiltradas" :key="factura.id_factura" @click="verDetalle(factura.id_factura)">
-                <td>{{ factura.num_factura || '-' }}</td>
-                <td>{{ formatearFecha(factura.fecha_emision) }}</td>
-                <td>{{ factura.comercializadora || '-' }}</td>
-                <td class="cups-cell">{{ factura.cups || '-' }}</td>
-                <td>{{ factura.consumo_total_kwh ? factura.consumo_total_kwh.toLocaleString() : '-' }}</td>
-                <td>{{ formatearImporte(factura.importe_total_eur) }}</td>
+              <tr v-for="factura in visibles" :key="factura.id_factura" @click="verDetalle(factura.id_factura)">
                 <td>
-                  <span class="badge" :class="badgeClass(factura.estado_extraccion)">
-                    {{ estadoLabel(factura.estado_extraccion) }}
-                  </span>
+                  <div class="num-factura">{{ factura.num_factura || '-' }}</div>
+                  <div class="fecha-factura">{{ formatearFecha(factura.fecha_emision) }}</div>
                 </td>
+                <td class="col-com">{{ factura.comercializadora || '-' }}</td>
+                <td class="cups-cell col-cups">{{ factura.cups || '-' }}</td>
+                <td class="num">{{ factura.consumo_total_kwh ? factura.consumo_total_kwh.toLocaleString() : '-' }}</td>
+                <td class="num">{{ formatearImporte(factura.importe_total_eur) }}</td>
                 <td>
-                  <span class="badge badge-info">{{ metodoLabel(factura.metodo_extraccion) }}</span>
-                </td>
-                <td>
-                  <div v-if="factura.confianza !== null && factura.confianza !== undefined" class="confidence-indicator">
-                    <div class="confidence-circle" :class="confidenceClass(factura.confianza)">
+                  <div class="extraccion">
+                    <span class="badge" :class="badgeClass(factura.estado_extraccion)">
+                      {{ estadoLabel(factura.estado_extraccion) }}
+                    </span>
+                    <span class="badge badge-info">{{ metodoLabel(factura.metodo_extraccion) }}</span>
+                    <span
+                      v-if="factura.confianza !== null && factura.confianza !== undefined"
+                      class="confianza"
+                      :class="confidenceClass(factura.confianza)">
                       {{ Math.round(factura.confianza * 100) }}%
-                    </div>
+                    </span>
                   </div>
-                  <span v-else>-</span>
                 </td>
                 <td>
                   <div class="acciones-fila">
@@ -122,13 +119,17 @@
                 </td>
               </tr>
               <tr v-if="facturasFiltradas.length === 0">
-                <td colspan="10" style="text-align: center; padding: 3rem; color: var(--color-text-muted);">
+                <td colspan="7" style="text-align: center; padding: 3rem; color: var(--color-text-muted);">
                   No se encontraron facturas con los filtros actuales
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
+        <PaginacionBar
+          v-bind="paginacionProps"
+          @update:pagina="irA"
+          @update:porPagina="definirTamano" />
       </div>
     </div>
   </div>
@@ -161,6 +162,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useFacturasStore } from '../stores/facturas'
+import { usePaginacion } from '../composables/usePaginacion'
+import PaginacionBar from '../components/PaginacionBar.vue'
 
 const router = useRouter()
 const store = useFacturasStore()
@@ -195,6 +198,14 @@ const comercializadorasUnicas = computed(() => {
   const set = new Set(store.facturas.map(f => f.comercializadora).filter(Boolean))
   return Array.from(set).sort()
 })
+
+// Una página de 25 sobre el resultado filtrado; al filtrar vuelve a la 1.
+const {
+  visibles,
+  props: paginacionProps,
+  irA,
+  definirTamano
+} = usePaginacion(facturasFiltradas, { porPagina: 25 })
 
 const importeTotal = computed(() => {
   return store.facturas.reduce((sum, f) => sum + (f.importe_total_eur || 0), 0)
@@ -308,7 +319,56 @@ onMounted(async () => {
 
 .cups-cell {
   font-family: monospace;
-  font-size: 0.8125rem;
+  font-size: 0.78rem;
+  word-break: break-all;
+  max-width: 130px;
+}
+
+.num-factura {
+  font-weight: 600;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.fecha-factura {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.num {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.extraccion {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.confianza {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.confianza.high { color: var(--color-success); }
+.confianza.medium { color: var(--color-warning); }
+.confianza.low { color: var(--color-error); }
+
+/* Por debajo de 1024 px el CUPS empuja la tabla fuera de la tarjeta: se oculta
+   en el listado (el dato completo sigue en la ficha de la factura). */
+@media (max-width: 1024px) {
+  .col-cups {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .col-com {
+    display: none;
+  }
 }
 
 .badge-sm {
@@ -329,7 +389,14 @@ onMounted(async () => {
 .acciones-fila {
   display: flex;
   gap: 0.4rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+/* Botones compactos: con el texto completo la fila crecía tres líneas */
+.acciones-fila .btn-sm {
+  padding: 0.3rem 0.55rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
 }
 
 .error-banner {

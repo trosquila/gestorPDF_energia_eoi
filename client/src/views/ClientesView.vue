@@ -73,7 +73,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="cliente in clientes" :key="cliente.id_cliente" :class="{ inactivo: cliente.activo === false }">
+              <tr v-for="cliente in visibles" :key="cliente.id_cliente" :class="{ inactivo: cliente.activo === false }">
                 <td class="empresa">{{ cliente.empresa }}</td>
                 <td>{{ cliente.nombre || '—' }}</td>
                 <td>{{ cliente.email || '—' }}</td>
@@ -112,6 +112,10 @@
             </tbody>
           </table>
         </div>
+        <PaginacionBar
+          v-bind="paginacionProps"
+          @update:pagina="irA"
+          @update:porPagina="definirTamano" />
       </div>
     </div>
 
@@ -153,6 +157,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useClientesStore } from '../stores/clientes'
 import ModalCliente from '../components/factura/ModalCliente.vue'
+import { usePaginacion } from '../composables/usePaginacion'
+import PaginacionBar from '../components/PaginacionBar.vue'
 
 const store = useClientesStore()
 
@@ -172,6 +178,13 @@ const reactivando = ref(null)
 const clientes = computed(() => store.clientes)
 const totalFacturas = computed(() => clientes.value.reduce((t, c) => t + (c.total_facturas || 0), 0))
 const sinFacturas = computed(() => clientes.value.filter(c => !c.total_facturas).length)
+
+const {
+  visibles,
+  props: paginacionProps,
+  irA,
+  definirTamano
+} = usePaginacion(clientes, { porPagina: 25 })
 
 let temporizador = null
 

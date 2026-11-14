@@ -257,7 +257,7 @@ onBeforeRouteLeave((to) => {
 }
 
 .fields-panel {
-  overflow-y: auto;
-  max-height: 70vh;
+  /* Sin scroll propio: la página entera se desplaza y no aparecen dos barras */
+  min-width: 0;
 }
 </style>

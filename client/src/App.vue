@@ -32,39 +32,54 @@
           <div class="nav-user">
             <span class="user-name">{{ authStore.userName }}</span>
             <div class="user-menu">
-              <button class="btn btn-secondary btn-sm" @click="showUserMenu = !showUserMenu">
+              <button
+                ref="botonUsuario"
+                class="btn btn-secondary btn-sm"
+                aria-haspopup="menu"
+                :aria-expanded="showUserMenu"
+                @click.stop="alternarMenu">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="3"/>
                   <path d="M12 2v2m0 16v2M2 12h2m16 0h2"/>
                 </svg>
               </button>
-              <div class="user-dropdown" v-if="showUserMenu">
-                <div class="dropdown-header">
-                  <span class="dropdown-email">{{ authStore.usuario?.email }}</span>
-                  <span class="badge" :class="roleBadgeClass">{{ authStore.usuario?.rol }}</span>
-                </div>
-                <hr class="dropdown-divider">
-                <button class="dropdown-item" @click="changePassword">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                  </svg>
-                  Cambiar contraseña
-                </button>
-                <button class="dropdown-item dropdown-item-danger" @click="logout">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                    <polyline points="16 17 21 12 16 7"/>
-                    <line x1="21" y1="12" x2="9" y2="12"/>
-                  </svg>
-                  Cerrar sesión
-                </button>
-              </div>
             </div>
           </div>
         </nav>
       </div>
     </header>
+
+    <!-- El menú va pegado al body a propósito: dentro del header lo recortaba
+         el contenedor de la cabecera y solo se veían un par de píxeles. -->
+    <Teleport to="body">
+      <div
+        v-if="showUserMenu"
+        class="user-dropdown"
+        role="menu"
+        :style="estiloMenu"
+        @click.stop>
+        <div class="dropdown-header">
+          <span class="dropdown-email">{{ authStore.usuario?.email }}</span>
+          <span class="badge" :class="roleBadgeClass">{{ authStore.usuario?.rol }}</span>
+        </div>
+        <hr class="dropdown-divider">
+        <button class="dropdown-item" role="menuitem" @click="changePassword">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Cambiar contraseña
+        </button>
+        <button class="dropdown-item dropdown-item-danger" role="menuitem" @click="logout">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          Cerrar sesión
+        </button>
+      </div>
+    </Teleport>
     <main class="main">
       <div class="container">
         <RouterView />
@@ -83,6 +98,8 @@ const router = useRouter()
 const authStore = useAuthStore()
 const solicitudesStore = useSolicitudesStore()
 const showUserMenu = ref(false)
+const botonUsuario = ref(null)
+const estiloMenu = ref({})
 
 // Contador de solicitudes pendientes (solo se consulta si es admin)
 const pendientes = computed(() => solicitudesStore.solicitudes.filter((s) => s.estado === 'pendiente').length)
@@ -118,12 +135,40 @@ function changePassword() {
   alert('Funcionalidad pendiente: implementar modal de cambio de contraseña')
 }
 
-// Cerrar dropdown al hacer click fuera
-document.addEventListener('click', (e) => {
-  if (showUserMenu.value && !e.target.closest('.user-menu')) {
-    showUserMenu.value = false
+/**
+ * Coloca el menú bajo el botón. Va en el body (position: fixed) para que no lo
+ * recorte ningún ancestro con overflow, y se recoloca al redimensionar.
+ */
+function colocarMenu() {
+  const boton = botonUsuario.value
+  if (!boton) return
+  const r = boton.getBoundingClientRect()
+  const ancho = 240
+  const izquierda = Math.max(8, Math.min(r.right - ancho, window.innerWidth - ancho - 8))
+  estiloMenu.value = {
+    position: 'fixed',
+    top: `${Math.round(r.bottom + 8)}px`,
+    left: `${Math.round(izquierda)}px`,
+    width: `${ancho}px`
   }
+}
+
+function alternarMenu() {
+  showUserMenu.value = !showUserMenu.value
+  if (showUserMenu.value) colocarMenu()
+}
+
+// Cerrar el dropdown al hacer click fuera, con Escape, o al desplazar la página
+document.addEventListener('click', (e) => {
+  if (!showUserMenu.value) return
+  if (e.target.closest('.user-menu') || e.target.closest('.user-dropdown')) return
+  showUserMenu.value = false
 })
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') showUserMenu.value = false
+})
+window.addEventListener('resize', () => { if (showUserMenu.value) colocarMenu() })
+window.addEventListener('scroll', () => { showUserMenu.value = false }, { passive: true })
 </script>
 
 <style scoped>
@@ -145,7 +190,12 @@ document.addEventListener('click', (e) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 64px;
+  gap: 1rem;
+  /* Antes era height fija: al partirse el menú en dos líneas se salía del header */
+  min-height: 64px;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .logo {
@@ -169,14 +219,12 @@ document.addEventListener('click', (e) => {
 
 .nav {
   display: flex;
-  gap: 0.5rem;
-  /* En pantallas estrechas se desplaza en horizontal en vez de partir el texto */
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-
-.nav::-webkit-scrollbar {
-  height: 4px;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  /* SIN overflow: cualquier overflow aquí recorta el menú de usuario, que se
+     dibuja fuera del flujo. En pantallas estrechas se parte en dos líneas. */
 }
 
 .nav-link {
@@ -242,15 +290,13 @@ document.addEventListener('click', (e) => {
 }
 
 .user-dropdown {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  right: 0;
+  /* posición, top y left vienen del estilo en línea calculado al abrir */
   min-width: 220px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
-  z-index: 200;
+  z-index: 300;
   overflow: hidden;
 }
 

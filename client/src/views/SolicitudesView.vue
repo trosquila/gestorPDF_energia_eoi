@@ -39,7 +39,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="solicitud in solicitudes" :key="solicitud.id_solicitud">
+            <tr v-for="solicitud in visibles" :key="solicitud.id_solicitud">
               <td>{{ solicitud.nombre }}</td>
               <td>{{ solicitud.email }}</td>
               <td><span class="badge badge-info">{{ solicitud.rol }}</span></td>
@@ -71,6 +71,10 @@
           </tbody>
         </table>
       </div>
+      <PaginacionBar
+        v-bind="paginacionProps"
+        @update:pagina="irA"
+        @update:porPagina="definirTamano" />
     </div>
 
     <!-- Rechazo con motivo -->
@@ -99,6 +103,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useSolicitudesStore } from '../stores/solicitudes'
+import { usePaginacion } from '../composables/usePaginacion'
+import PaginacionBar from '../components/PaginacionBar.vue'
 
 const store = useSolicitudesStore()
 
@@ -111,6 +117,13 @@ const procesando = ref(null)
 const solicitudARechazar = ref(null)
 const motivo = ref('')
 const errorRechazo = ref(null)
+
+const {
+  visibles,
+  props: paginacionProps,
+  irA,
+  definirTamano
+} = usePaginacion(solicitudes, { porPagina: 25 })
 
 async function cargar() {
   try {

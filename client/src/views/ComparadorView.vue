@@ -167,7 +167,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="oferta in comparador.resultado.ofertas" :key="oferta.id_oferta">
+              <tr v-for="oferta in rankingVisibles" :key="oferta.id_oferta">
                 <td class="empresa">{{ oferta.comercializadora }}</td>
                 <td>{{ oferta.nombre }}</td>
                 <td><span class="badge badge-info">{{ oferta.tipo }}</span></td>
@@ -182,7 +182,11 @@
             </tbody>
           </table>
         </div>
-        <p v-else class="texto-ayuda">
+        <PaginacionBar
+          v-bind="rankingProps"
+          @update:pagina="irARanking"
+          @update:porPagina="tamanoRanking" />
+        <p v-if="!comparador.resultado.ofertas.length" class="texto-ayuda">
           No hay ofertas en el catálogo que se puedan comparar con este perfil.
           Añádelas más abajo.
         </p>
@@ -318,7 +322,7 @@
               <tr><th>Comercializadora</th><th>Tarifa</th><th>Tipo</th><th>Peajes</th><th>Energía P1</th><th>Acciones</th></tr>
             </thead>
             <tbody>
-              <tr v-for="oferta in comparador.ofertas" :key="oferta.id_oferta">
+              <tr v-for="oferta in catalogoVisibles" :key="oferta.id_oferta">
                 <td class="empresa">{{ oferta.comercializadora }}</td>
                 <td>{{ oferta.nombre }}</td>
                 <td>{{ oferta.tipo }}</td>
@@ -331,6 +335,10 @@
             </tbody>
           </table>
         </div>
+        <PaginacionBar
+          v-bind="catalogoProps"
+          @update:pagina="irACatalogo"
+          @update:porPagina="tamanoCatalogo" />
       </div>
 
       <!-- Atribución obligatoria mientras se usen datos de la CNMC -->
@@ -352,9 +360,29 @@
 import { ref, computed, onMounted } from 'vue'
 import { useComparadorStore } from '../stores/comparador'
 import { useFacturasStore } from '../stores/facturas'
+import { usePaginacion } from '../composables/usePaginacion'
+import PaginacionBar from '../components/PaginacionBar.vue'
 
 const comparador = useComparadorStore()
 const facturasStore = useFacturasStore()
+
+// Ranking de la simulación y catálogo completo: listas largas, paginadas.
+const ofertasRanking = computed(() => comparador.resultado?.ofertas || [])
+const ofertasCatalogo = computed(() => comparador.ofertas || [])
+
+const {
+  visibles: rankingVisibles,
+  props: rankingProps,
+  irA: irARanking,
+  definirTamano: tamanoRanking
+} = usePaginacion(ofertasRanking, { porPagina: 10 })
+
+const {
+  visibles: catalogoVisibles,
+  props: catalogoProps,
+  irA: irACatalogo,
+  definirTamano: tamanoCatalogo
+} = usePaginacion(ofertasCatalogo, { porPagina: 15 })
 
 const fuentes = computed(() => comparador.fuentes)
 const fuenteElegida = ref('ree')

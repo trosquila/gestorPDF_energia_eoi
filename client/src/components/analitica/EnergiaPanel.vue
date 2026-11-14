@@ -79,7 +79,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(s, i) in datos.sobrecontratacion" :key="`${s.id_factura}-${s.periodo}-${i}`">
+                  <tr v-for="(s, i) in sobreVisibles" :key="`${s.id_factura}-${s.periodo}-${i}`">
                     <td>{{ s.num_factura || 'sin número' }}</td>
                     <td>{{ s.comercializadora || '—' }}</td>
                     <td><span class="badge badge-info">{{ s.periodo }}</span></td>
@@ -94,6 +94,10 @@
                 </tbody>
               </table>
             </div>
+            <PaginacionBar
+              v-bind="sobreProps"
+              @update:pagina="irASobre"
+              @update:porPagina="tamanoSobre" />
           </template>
           <p v-else class="texto-ayuda">
             Sin datos suficientes: hacen falta la potencia contratada y la máxima demandada en la misma factura.
@@ -126,7 +130,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="c in datos.ahorro_potencial.detalle" :key="c.id_factura">
+                  <tr v-for="c in ahorroVisibles" :key="c.id_factura">
                     <td>{{ c.num_factura || 'sin número' }}</td>
                     <td>{{ formatoDinero(c.importe_actual) }}</td>
                     <td>{{ c.mejor_oferta }}</td>
@@ -136,6 +140,10 @@
                 </tbody>
               </table>
             </div>
+            <PaginacionBar
+              v-bind="ahorroProps"
+              @update:pagina="irAAhorro"
+              @update:porPagina="tamanoAhorro" />
           </template>
           <p v-else class="texto-ayuda">
             Sin ofertas en el catálogo (o sin facturas con consumo por periodo) no se puede calcular.
@@ -168,13 +176,17 @@
             <table class="tabla-mini">
               <thead><tr><th>Comercializadora</th><th>kWh</th><th>Importe</th></tr></thead>
               <tbody>
-                <tr v-for="c in datos.por_comercializadora" :key="c.nombre">
+                <tr v-for="c in comercialesVisibles" :key="c.nombre">
                   <td>{{ c.nombre }}</td>
                   <td>{{ formatoNumero(c.kwh) }}</td>
                   <td>{{ formatoDinero(c.importe) }}</td>
                 </tr>
               </tbody>
             </table>
+            <PaginacionBar
+              v-bind="comercialesProps"
+              @update:pagina="irAComerciales"
+              @update:porPagina="tamanoComerciales" />
           </div>
         </div>
       </div>
@@ -183,8 +195,10 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { facturasApi } from '../../services/api'
+import { usePaginacion } from '../../composables/usePaginacion'
+import PaginacionBar from '../PaginacionBar.vue'
 
 const props = defineProps({
   // Mismos filtros que la vista (fechas, comercializadora, provincia, cliente)
@@ -194,6 +208,32 @@ const props = defineProps({
 const datos = ref(null)
 const cargando = ref(true)
 const error = ref(null)
+
+// Tres tablas que pueden traer decenas de filas (una por factura y periodo).
+const sobrecontratacion = computed(() => datos.value?.sobrecontratacion || [])
+const detalleAhorro = computed(() => datos.value?.ahorro_potencial?.detalle || [])
+const comerciales = computed(() => datos.value?.por_comercializadora || [])
+
+const {
+  visibles: sobreVisibles,
+  props: sobreProps,
+  irA: irASobre,
+  definirTamano: tamanoSobre
+} = usePaginacion(sobrecontratacion, { porPagina: 10 })
+
+const {
+  visibles: ahorroVisibles,
+  props: ahorroProps,
+  irA: irAAhorro,
+  definirTamano: tamanoAhorro
+} = usePaginacion(detalleAhorro, { porPagina: 10 })
+
+const {
+  visibles: comercialesVisibles,
+  props: comercialesProps,
+  irA: irAComerciales,
+  definirTamano: tamanoComerciales
+} = usePaginacion(comerciales, { porPagina: 10 })
 
 async function cargar() {
   cargando.value = true

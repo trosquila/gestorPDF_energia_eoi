@@ -151,7 +151,7 @@
                 <tr><th>Comercializadora</th><th>Facturas</th><th>kWh</th><th>Importe</th><th>€/kWh</th></tr>
               </thead>
               <tbody>
-                <tr v-for="c in porComercializadora" :key="c.nombre">
+                <tr v-for="c in comercialesVisibles" :key="c.nombre">
                   <td>{{ c.nombre }}</td>
                   <td>{{ c.facturas }}</td>
                   <td>{{ formatoNumero(c.kwh) }}</td>
@@ -160,6 +160,11 @@
                 </tr>
               </tbody>
             </table>
+            <PaginacionBar
+              v-if="porComercializadora.length"
+              v-bind="comercialesProps"
+              @update:pagina="irAComerciales"
+              @update:porPagina="tamanoComerciales" />
             <p v-else class="texto-ayuda">Sin datos con estos filtros.</p>
 
             <template v-if="porProvincia.length > 1">
@@ -167,13 +172,17 @@
               <table class="tabla-mini">
                 <thead><tr><th>Provincia</th><th>Facturas</th><th>Importe</th></tr></thead>
                 <tbody>
-                  <tr v-for="p in porProvincia" :key="p.nombre">
+                  <tr v-for="p in provinciasVisibles" :key="p.nombre">
                     <td>{{ p.nombre }}</td>
                     <td>{{ p.facturas }}</td>
                     <td>{{ formatoDinero(p.importe) }}</td>
                   </tr>
                 </tbody>
               </table>
+              <PaginacionBar
+                v-bind="provinciasProps"
+                @update:pagina="irAProvincias"
+                @update:porPagina="tamanoProvincias" />
             </template>
           </div>
         </div>
@@ -221,6 +230,8 @@ import { useRouter } from 'vue-router'
 import { useFacturasStore } from '../stores/facturas'
 import Chart from 'chart.js/auto'
 import EnergiaPanel from '../components/analitica/EnergiaPanel.vue'
+import { usePaginacion } from '../composables/usePaginacion'
+import PaginacionBar from '../components/PaginacionBar.vue'
 
 const router = useRouter()
 const store = useFacturasStore()
@@ -244,6 +255,20 @@ const reparto = ref(null)
 const porComercializadora = ref([])
 const porProvincia = ref([])
 const avisos = ref([])
+
+const {
+  visibles: comercialesVisibles,
+  props: comercialesProps,
+  irA: irAComerciales,
+  definirTamano: tamanoComerciales
+} = usePaginacion(porComercializadora, { porPagina: 10 })
+
+const {
+  visibles: provinciasVisibles,
+  props: provinciasProps,
+  irA: irAProvincias,
+  definirTamano: tamanoProvincias
+} = usePaginacion(porProvincia, { porPagina: 10 })
 
 const graficoEvolucion = ref(null)
 const graficoReparto = ref(null)
