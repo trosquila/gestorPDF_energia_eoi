@@ -3,6 +3,9 @@ import { getSupabaseClient, getClienteById } from '../lib/supabase.js'
 import { preciosDelDia, mediaPorPeriodo2_0TD } from '../lib/precios.js'
 import { consultarAsistente } from '../lib/asistente.js'
 import { descargarOfertas, mapearCatalogo, ATRIBUCION_CNMC } from '../lib/cnmc.js'
+import { requiereUsuario } from '../middleware/auth.js'
+import { estadoCorreo, enviarCorreo, esEmailValido } from '../lib/correo.js'
+import { construirAviso } from '../lib/avisoCambio.js'
 import {
   costeDeOferta,
   mapaPeriodos,
@@ -13,6 +16,15 @@ import {
 } from '../lib/coste.js'
 
 const router = express.Router()
+
+/** ¿La tabla de avisos existe ya? (falta ejecutar sql/14_avisos_cambio.sql) */
+function faltaTablaAvisos(error) {
+  const mensaje = String(error?.message || '')
+  return error?.code === '42P01' ||
+    error?.code === 'PGRST205' ||
+    /relation .*avisos_cambio.* does not exist/i.test(mensaje) ||
+    /Could not find the table .*avisos_cambio/i.test(mensaje)
+}
 
 /** ¿La tabla del catálogo existe ya? (falta ejecutar sql/12_ofertas.sql) */
 function faltaTablaOfertas(error) {
@@ -593,7 +605,9 @@ router.get('/facturas/:id/perfil', async (req, res, next) => {
           provincia: data.provincia,
           peaje_acceso: data.peaje_acceso
         },
-        cliente: cliente ? { empresa: cliente.empresa, nombre: cliente.nombre } : null,
+        cliente: cliente
+          ? { empresa: cliente.empresa, nombre: cliente.nombre, email: cliente.email || null, telefono: cliente.telefono || null }
+          : null,
         perfil: {
           provincia: data.provincia,
           peaje: data.peaje_acceso || '2.0TD',
@@ -602,6 +616,197 @@ router.get('/facturas/:id/perfil', async (req, res, next) => {
           excedentes_kwh: data.excedentes_kwh || 0
         }
       }
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// === Aviso por correo al cliente ===
+
+/** ¿Se puede enviar correo desde este servidor? */
+router.get('/correo/estado', (req, res) => {
+  res.json({ data: estadoCorreo() })
+})
+
+/**
+ * POST /api/comparador/notificar
+ * { id_factura, id_oferta, email? }
+ *
+ * Recalcula el coste en el servidor (no se fía de lo que diga el cliente),
+ * exige que la oferta sea más barata que la factura y envía el aviso.
+ */
+router.post('/notificar', requiereUsuario, async (req, res, next) => {
+  try {
+    const { id_factura, id_oferta, email } = req.body || {}
+    if (!id_factura || !id_oferta) {
+      return res.status(400).json({ error: 'Faltan la factura y la oferta que se quieren comparar' })
+    }
+
+    const supabase = getSupabaseClient(true)
+
+    const { data: factura, error: errorFactura } = await supabase
+      .from('facturas')
+      .select('*')
+      .eq('id_factura', id_factura)
+      .maybeSingle()
+    if (errorFactura) throw errorFactura
+    if (!factura) return res.status(404).json({ error: 'Factura no encontrada' })
+
+    const { data: oferta, error: errorOferta } = await supabase
+      .from('ofertas')
+      .select('*')
+      .eq('id_oferta', id_oferta)
+      .maybeSingle()
+    if (errorOferta) throw errorOferta
+    if (!oferta) return res.status(404).json({ error: 'Oferta no encontrada' })
+    if (oferta.activo === false) {
+      return res.status(409).json({ error: 'Esa oferta ya no está activa en el catálogo' })
+    }
+
+    const consumos = mapaPeriodos(factura.consumos_periodo)
+    if (Object.keys(consumos).length === 0) {
+      return res.status(400).json({ error: 'La factura no trae consumo por periodo: no se puede comparar' })
+    }
+
+    const dias = numero(factura.dias_facturados, 30) || 30
+    const perfil = {
+      provincia: factura.provincia,
+      peaje: String(factura.peaje_acceso || '2.0TD').toUpperCase(),
+      potencias: mapaPeriodos(factura.potencias_contratadas),
+      consumos,
+      excedentes_kwh: numero(factura.excedentes_kwh),
+      dias
+    }
+
+    const importeActual = numero(factura.importe_total_eur)
+    if (!importeActual) {
+      return res.status(400).json({ error: 'La factura no trae importe total: no hay con qué comparar el ahorro' })
+    }
+
+    const coste = costeDeOferta(oferta, perfil)
+    const ahorro = redondear(importeActual - coste.total)
+    if (ahorro <= 0) {
+      return res.status(409).json({
+        error: `Esa oferta no es más barata: saldría por ${coste.total} € frente a los ${importeActual} € de la factura`,
+        ahorro
+      })
+    }
+
+    const cliente = factura.id_cliente ? await getClienteById(factura.id_cliente).catch(() => null) : null
+    const destino = String(email || cliente?.email || '').trim()
+    if (!esEmailValido(destino)) {
+      return res.status(400).json({
+        error: cliente?.email
+          ? `El correo guardado del cliente no es válido («${cliente.email}»): escribe uno correcto`
+          : 'El cliente no tiene correo electrónico: indícalo para poder enviar el aviso',
+        requiere_email: true
+      })
+    }
+
+    // Un mismo aviso (factura + oferta + destinatario) no se repite en 24 h.
+    const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const { data: previo, error: errorPrevio } = await supabase
+      .from('avisos_cambio')
+      .select('id_aviso, created_at, estado')
+      .eq('id_factura', id_factura)
+      .eq('id_oferta', id_oferta)
+      .eq('email_destino', destino)
+      .gte('created_at', desde)
+      .limit(1)
+      .maybeSingle()
+
+    if (errorPrevio && !faltaTablaAvisos(errorPrevio)) throw errorPrevio
+    if (previo) {
+      return res.status(429).json({
+        error: 'Ya se envió este mismo aviso en las últimas 24 horas',
+        ultimo_envio: previo.created_at,
+        id_aviso: previo.id_aviso
+      })
+    }
+
+    const configuracion = estadoCorreo()
+    const aviso = construirAviso({
+      factura,
+      oferta,
+      cliente,
+      coste,
+      ahorro,
+      dias,
+      contacto: configuracion.contacto
+    })
+
+    let entrega = { estado: 'registrado', proveedor: 'registro', id_externo: null }
+    let errorEnvio = null
+    try {
+      entrega = await enviarCorreo({
+        para: destino,
+        asunto: aviso.asunto,
+        html: aviso.html,
+        texto: aviso.texto
+      })
+    } catch (e) {
+      errorEnvio = e
+      entrega = { estado: 'error', proveedor: configuracion.transporte, id_externo: null }
+    }
+
+    const registro = {
+      id_factura,
+      id_oferta,
+      id_cliente: factura.id_cliente || null,
+      email_destino: destino,
+      asunto: aviso.asunto,
+      cuerpo_texto: aviso.texto,
+      cuerpo_html: aviso.html,
+      coste_actual: importeActual,
+      coste_oferta: coste.total,
+      ahorro_mes: ahorro,
+      ahorro_anual: redondear(ahorro * (365 / dias)),
+      dias_periodo: dias,
+      estado: entrega.estado,
+      proveedor: entrega.proveedor,
+      id_externo: entrega.id_externo || null,
+      error: errorEnvio ? String(errorEnvio.message).slice(0, 500) : null,
+      enviado_en: entrega.estado === 'enviado' ? new Date().toISOString() : null,
+      id_usuario: req.usuario?.id_usuario || null
+    }
+
+    const { data: guardado, error: errorGuardado } = await supabase
+      .from('avisos_cambio')
+      .insert(registro)
+      .select()
+      .single()
+
+    if (errorGuardado) {
+      if (faltaTablaAvisos(errorGuardado)) {
+        // El correo ya salió: no se tumba la petición por no poder auditar.
+        if (errorEnvio) {
+          return res.status(502).json({
+            error: `No se pudo enviar el correo: ${errorEnvio.message}`,
+            aviso: 'Falta la tabla de avisos: ejecuta server/sql/14_avisos_cambio.sql'
+          })
+        }
+        return res.status(201).json({
+          data: { ...registro, id_aviso: null, cifras: aviso.cifras },
+          entrega,
+          aviso: entrega.estado === 'enviado'
+            ? 'El correo se envió, pero no quedó registrado: ejecuta server/sql/14_avisos_cambio.sql'
+            : 'El aviso no se entregó (no hay proveedor de correo configurado) ni quedó registrado: ejecuta server/sql/14_avisos_cambio.sql'
+        })
+      }
+      throw errorGuardado
+    }
+
+    if (errorEnvio) {
+      return res.status(502).json({
+        error: `No se pudo enviar el correo: ${errorEnvio.message}`,
+        data: { ...guardado, cifras: aviso.cifras }
+      })
+    }
+
+    res.status(201).json({
+      data: { ...guardado, cifras: aviso.cifras },
+      entrega
     })
   } catch (error) {
     next(error)

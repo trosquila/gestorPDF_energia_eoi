@@ -226,6 +226,35 @@ una comercializadora concreta.
 Debajo del catálogo aparece la nota de atribución: es **obligatoria** porque los
 datos son de la CNMC.
 
+### Avisar al cliente por correo
+
+Cuando una oferta del ranking es **más barata** que la factura del cliente, en la
+última columna de la tabla aparece el botón **Avisar**.
+
+1. Carga el perfil desde una factura (**Cargar de la factura**): el aviso necesita
+   saber de quién es y cuánto paga.
+2. Pulsa **Avisar** en la fila de la oferta que quieras proponer.
+3. Revisa el resumen (cliente, factura, lo que paga ahora, lo que pagaría y el
+   ahorro al año) y el correo de destino. Si el cliente no tiene correo guardado,
+   escríbelo ahí: **no se modifica su ficha**.
+4. **Enviar correo**.
+
+Lo que recibe el cliente: un mensaje con el ahorro estimado al año, la comparación
+de lo que paga ahora frente a la oferta, los precios por periodo (€/kWh y
+€/kW·año) y una invitación a responder para que el equipo de Control Energía le
+gestione el cambio.
+
+Detalles que conviene saber:
+
+- Solo se puede avisar de ofertas **con ahorro positivo**; en las demás la columna
+  muestra un guion con el motivo al pasar el ratón.
+- No se repite el mismo aviso (misma factura, misma oferta, mismo destinatario) en
+  **24 horas**.
+- Si el envío de correo no está configurado en el servidor, la aplicación lo dice
+  antes de enviar: el aviso queda guardado, pero no se entrega.
+- Cada aviso enviado se guarda con el mensaje exacto y el ahorro calculado, para
+  poder consultarlo después.
+
 ### Asistente
 
 Escribe una pregunta («¿qué oferta me conviene?», «¿cuánto ahorraría?») y el
@@ -285,6 +314,9 @@ El número rojo en el menú indica cuántas hay pendientes.
 | No veo la columna CUPS (o la comercializadora) | La ventana es estrecha: por debajo de 1024 px se ocultan para que la tabla quepa. Abre la ficha de la factura, ahí está el CUPS |
 | No veo una factura que sé que existe | Está en otra página del listado, o el filtro la excluye. Mira el resumen «x–y de N» debajo de la tabla |
 | «Cambiar contraseña» no hace nada | Todavía no está la ventana en la interfaz; pide a un administrador que la cambie |
+| El botón **Avisar** no aparece (sale un guion) | Carga el perfil desde una factura o elige una oferta con ahorro positivo: el guion explica el motivo |
+| «No hay proveedor de correo configurado» | Falta `RESEND_API_KEY` o `SMTP_*` en el servidor; el aviso se guarda pero no se entrega |
+| El cliente dice que no le llegó el aviso | Revisa la carpeta de spam y que el correo del cliente esté bien escrito; si el proveedor rechazó el envío, el mensaje de error lo indica |
 
 ---
 

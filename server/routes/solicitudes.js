@@ -1,4 +1,5 @@
 import express from 'express'
+import { requiereAdmin } from '../middleware/auth.js'
 import {
   getSupabaseClient,
   getSolicitudes,
@@ -11,42 +12,8 @@ import {
 
 const router = express.Router()
 
-/**
- * Comprueba que quien llama es un administrador activo.
- * El cliente manda "Authorization: Bearer <id_usuario>".
- */
-export async function requiereAdmin(req, res, next) {
-  try {
-    const cabecera = req.headers.authorization || ''
-    const idUsuario = cabecera.replace(/^Bearer\s*/i, '').trim()
-
-    // Formato UUID; si no, ni se consulta la base de datos
-    const esUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idUsuario)
-    if (!esUuid) {
-      return res.status(401).json({ error: 'No autenticado' })
-    }
-
-    const supabase = getSupabaseClient(true)
-    const { data: usuario, error } = await supabase
-      .from('usuarios')
-      .select('id_usuario, rol, activo')
-      .eq('id_usuario', idUsuario)
-      .maybeSingle()
-
-    if (error) throw error
-    if (!usuario || usuario.activo === false) {
-      return res.status(401).json({ error: 'Sesión no válida' })
-    }
-    if (usuario.rol !== 'admin') {
-      return res.status(403).json({ error: 'Solo un administrador puede hacer esto' })
-    }
-
-    req.usuario = usuario
-    next()
-  } catch (error) {
-    next(error)
-  }
-}
+// requiereAdmin vive en middleware/auth.js, compartido con las rutas nuevas
+export { requiereAdmin }
 
 // GET /api/solicitudes?estado=pendiente
 router.get('/', requiereAdmin, async (req, res, next) => {

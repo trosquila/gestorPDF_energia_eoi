@@ -157,26 +157,36 @@
             <thead>
               <tr>
                 <th>Comercializadora</th>
-                <th>Oferta</th>
-                <th>Tipo</th>
+                <th class="col-oferta">Oferta</th>
+                <th class="col-tipo">Tipo</th>
                 <th>Potencia</th>
                 <th>Energía</th>
                 <th>Impuestos</th>
                 <th>Total</th>
                 <th v-if="comparador.resultado.actual">Ahorro</th>
+                <th class="col-aviso">Avisar</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="oferta in rankingVisibles" :key="oferta.id_oferta">
                 <td class="empresa">{{ oferta.comercializadora }}</td>
-                <td>{{ oferta.nombre }}</td>
-                <td><span class="badge badge-info">{{ oferta.tipo }}</span></td>
+                <td class="col-oferta">{{ oferta.nombre }}</td>
+                <td class="col-tipo"><span class="badge badge-info">{{ oferta.tipo }}</span></td>
                 <td>{{ formatearDinero(oferta.coste.potencia) }}</td>
                 <td>{{ formatearDinero(oferta.coste.energia) }}</td>
                 <td>{{ formatearDinero(oferta.coste.impuesto + oferta.coste.iva) }}</td>
                 <td><strong>{{ formatearDinero(oferta.coste.total) }}</strong></td>
                 <td v-if="comparador.resultado.actual" :class="oferta.ahorro > 0 ? 'ahorro-positivo' : 'ahorro-negativo'">
                   {{ oferta.ahorro > 0 ? '+' : '' }}{{ formatearDinero(oferta.ahorro) }}
+                </td>
+                <td class="col-aviso">
+                  <button
+                    v-if="puedeNotificar(oferta)"
+                    class="btn btn-primary btn-sm"
+                    @click="abrirAviso(oferta)">
+                    Avisar
+                  </button>
+                  <span v-else class="sin-aviso" :title="motivoSinAviso(oferta)">—</span>
                 </td>
               </tr>
             </tbody>
@@ -186,6 +196,10 @@
           v-bind="rankingProps"
           @update:pagina="irARanking"
           @update:porPagina="tamanoRanking" />
+        <p v-if="correoNoConfigurado" class="aviso-correo">
+          <strong>Aviso por correo sin configurar:</strong> el aviso se registrará, pero no se entregará
+          hasta definir <code>RESEND_API_KEY</code> o <code>SMTP_*</code> en el servidor.
+        </p>
         <p v-if="!comparador.resultado.ofertas.length" class="texto-ayuda">
           No hay ofertas en el catálogo que se puedan comparar con este perfil.
           Añádelas más abajo.
@@ -353,6 +367,59 @@
         </p>
       </div>
     </div>
+
+    <!-- Aviso por correo al cliente -->
+    <div v-if="aviso" class="modal-fondo" @click.self="cerrarAviso">
+      <div class="modal-card">
+        <h3>Avisar al cliente del cambio de tarifa</h3>
+
+        <p class="modal-texto">
+          Se enviará un correo a <strong>{{ aviso.email || 'sin correo' }}</strong> con la comparación
+          y el ahorro estimado. El importe se recalcula en el servidor con los datos de la factura.
+        </p>
+
+        <div class="resumen-aviso">
+          <div><span>Cliente</span><strong>{{ nombreClienteAviso }}</strong></div>
+          <div><span>Factura</span><strong>{{ facturaNumeroAviso }}</strong></div>
+          <div><span>Paga ahora</span><strong>{{ formatearDinero(comparador.resultado?.actual?.importe) }}</strong></div>
+          <div><span>{{ aviso.oferta.comercializadora }}</span><strong>{{ formatearDinero(aviso.oferta.coste.total) }}</strong></div>
+          <div class="total"><span>Ahorro estimado al año</span><strong>{{ formatearDinero(ahorroAnualAviso) }}</strong></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Correo del cliente</label>
+          <input
+            v-model.trim="aviso.email"
+            type="email"
+            class="form-input"
+            placeholder="cliente@empresa.com"
+            :disabled="aviso.enviando || aviso.exito"
+            @keyup.enter="enviarAviso" />
+          <p class="ayuda-aviso">
+            Si el cliente no tiene correo guardado, escríbelo aquí: no se modifica su ficha.
+          </p>
+        </div>
+
+        <p v-if="correoNoConfigurado" class="modal-aviso">
+          No hay proveedor de correo configurado: el aviso quedará registrado pero no se entregará.
+        </p>
+        <p v-if="aviso.error" class="modal-error">{{ aviso.error }}</p>
+        <p v-if="aviso.exito" class="modal-exito">{{ aviso.exito }}</p>
+
+        <div class="modal-acciones">
+          <button class="btn btn-secondary" @click="cerrarAviso" :disabled="aviso.enviando">
+            {{ aviso.exito ? 'Cerrar' : 'Cancelar' }}
+          </button>
+          <button
+            v-if="!aviso.exito"
+            class="btn btn-primary"
+            @click="enviarAviso"
+            :disabled="aviso.enviando || !aviso.email">
+            {{ aviso.enviando ? 'Enviando…' : 'Enviar correo' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -429,6 +496,73 @@ const potenciaTotal = computed(() =>
   Object.values(perfil.value.potencias || {}).reduce((t, v) => t + (Number(v) || 0), 0))
 const mejorOferta = computed(() => comparador.resultado?.ofertas?.[0] || null)
 
+// === Aviso por correo al cliente ===
+const clienteDeFactura = ref(null)
+const aviso = ref(null)
+
+const correoNoConfigurado = computed(() => comparador.correo && comparador.correo.disponible === false)
+const nombreClienteAviso = computed(() =>
+  clienteDeFactura.value?.empresa || clienteDeFactura.value?.nombre || 'Cliente sin ficha')
+const facturaNumeroAviso = computed(() => comparador.resultado?.actual?.num_factura || 'factura cargada')
+
+const ahorroAnualAviso = computed(() => {
+  const oferta = aviso.value?.oferta
+  const dias = Number(comparador.resultado?.perfil?.dias) || 30
+  if (!oferta || oferta.ahorro === null || oferta.ahorro === undefined) return null
+  return oferta.ahorro * (365 / dias)
+})
+
+/** Solo se puede avisar partiendo de una factura real con un cliente detrás. */
+function puedeNotificar(oferta) {
+  return Boolean(facturaElegida.value) &&
+    Boolean(comparador.resultado?.actual) &&
+    Number(oferta.ahorro) > 0
+}
+
+function motivoSinAviso(oferta) {
+  if (!comparador.resultado?.actual) return 'Carga el perfil desde una factura para poder avisar al cliente'
+  if (!(Number(oferta.ahorro) > 0)) return 'Esta oferta no es más barata que la factura actual'
+  return 'No se puede avisar de esta oferta'
+}
+
+function abrirAviso(oferta) {
+  aviso.value = {
+    oferta,
+    email: clienteDeFactura.value?.email || '',
+    enviando: false,
+    error: null,
+    exito: null
+  }
+}
+
+function cerrarAviso() {
+  if (aviso.value?.enviando) return
+  aviso.value = null
+}
+
+async function enviarAviso() {
+  if (!aviso.value || aviso.value.enviando || aviso.value.exito) return
+  aviso.value.enviando = true
+  aviso.value.error = null
+  try {
+    const respuesta = await comparador.notificarCambio({
+      id_factura: facturaElegida.value,
+      id_oferta: aviso.value.oferta.id_oferta,
+      email: aviso.value.email
+    })
+    const entrega = respuesta.entrega?.estado
+    const destino = respuesta.data?.email_destino || aviso.value.email
+    aviso.value.exito = entrega === 'enviado'
+      ? `Correo enviado a ${destino}.`
+      : `Aviso guardado para ${destino}, pero no se ha entregado: falta configurar el proveedor de correo.`
+    if (respuesta.aviso) aviso.value.exito += ` ${respuesta.aviso}`
+  } catch (e) {
+    aviso.value.error = e.response?.data?.error || e.message
+  } finally {
+    aviso.value.enviando = false
+  }
+}
+
 function formatearDinero(valor) {
   if (valor === null || valor === undefined) return '—'
   return Number(valor).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })
@@ -458,6 +592,7 @@ function clasePrecio(valor) {
 
 async function cargarDeFactura() {
   const datos = await comparador.perfilDeFactura(facturaElegida.value)
+  clienteDeFactura.value = datos.cliente || null
   perfil.value.provincia = datos.perfil.provincia || ''
   perfil.value.peaje = datos.perfil.peaje || '2.0TD'
   perfil.value.dias = datos.factura.dias_facturados || 31
@@ -615,7 +750,8 @@ onMounted(async () => {
     comparador.cargarFuentes(),
     comparador.cargarPrecios(),
     comparador.cargarOfertas(),
-    comparador.cargarEstadoCatalogo()
+    comparador.cargarEstadoCatalogo(),
+    comparador.cargarEstadoCorreo()
   ])
 
   // Facturas que ya tienen consumo por periodo
@@ -823,5 +959,90 @@ onMounted(async () => {
   gap: 0.4rem;
   flex-wrap: wrap;
   align-items: baseline;
+}
+
+/* ===== Aviso por correo al cliente ===== */
+.col-aviso {
+  width: 92px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sin-aviso {
+  color: var(--color-text-muted);
+}
+
+.aviso-correo {
+  margin: 0.75rem 0 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  background: rgba(217, 119, 6, 0.1);
+  color: #92400e;
+  font-size: 0.8125rem;
+}
+
+.resumen-aviso {
+  display: grid;
+  gap: 0.35rem;
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.resumen-aviso div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.resumen-aviso span {
+  color: var(--color-text-muted);
+}
+
+.resumen-aviso .total {
+  margin-top: 0.25rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-primary);
+}
+
+.ayuda-aviso {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.modal-aviso {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  background: rgba(217, 119, 6, 0.12);
+  color: #92400e;
+  font-size: 0.8125rem;
+}
+
+.modal-exito {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  background: rgba(5, 150, 105, 0.12);
+  color: #065f46;
+  font-size: 0.8125rem;
+}
+
+/* En pantallas medianas se retiran las columnas que no son imprescindibles */
+@media (max-width: 1120px) {
+  .col-tipo {
+    display: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .col-oferta {
+    display: none;
+  }
 }
 </style>

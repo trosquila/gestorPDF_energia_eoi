@@ -25,6 +25,8 @@ ofertas de todas las comercializadoras españolas.
   provincia, cliente y estado.
 - **Comparador**: perfil de consumo → ranking de ofertas + PVPC estimado, con
   catálogo oficial de la CNMC, alta manual, importación CSV y asistente de IA.
+  Cada oferta más barata se le puede **enviar al cliente por correo** con el
+  ahorro y la comparación de precios.
 - **Clientes y solicitudes**: CRUD de clientes (admin) y aprobación de registros.
 - **Listados paginados**: todas las tablas largas (facturas, clientes, catálogo,
   ranking, analítica) van por páginas de 10, 15 o 25 filas, sin barras de
@@ -110,6 +112,21 @@ rm -rf .vercel
 
 La mención a la CNMC aparece en la pantalla del comparador y en los datos
 devueltos por la API (`atribucion`).
+
+## Correo de avisos
+
+El comparador puede enviar al cliente un correo con la oferta más barata y el
+ahorro. Necesita **un** proveedor configurado en las variables de entorno de la
+API (no en el front):
+
+| Proveedor | Variables | Nota |
+|---|---|---|
+| Resend | `RESEND_API_KEY`, `CORREO_REMITENTE` | HTTP, sin dependencias; el dominio debe estar verificado en Resend |
+| SMTP | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `CORREO_REMITENTE` | Gmail con contraseña de aplicación, Brevo, Mailtrap… |
+
+`CORREO_CONTACTO` es la dirección que aparece en el mensaje para que el cliente
+responda. Sin proveedor configurado la aplicación **no falla**: el aviso queda
+registrado con estado `registrado` y la interfaz avisa de que no se ha entregado.
 
 ## Contribuir
 

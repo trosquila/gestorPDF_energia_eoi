@@ -12,6 +12,8 @@ export const useComparadorStore = defineStore('comparador', () => {
   const asistente = ref(null)
   const loading = ref(false)
   const error = ref(null)
+  const correo = ref(null)
+  const notificando = ref(false)
 
   function mensaje(e) {
     return e.response?.data?.error || e.message
@@ -128,6 +130,32 @@ export const useComparadorStore = defineStore('comparador', () => {
     return r.data.data || r.data
   }
 
+  // === Aviso por correo al cliente ===
+
+  async function cargarEstadoCorreo() {
+    try {
+      const r = await comparadorApi.estadoCorreo()
+      correo.value = r.data.data || r.data
+    } catch {
+      correo.value = { disponible: false, transporte: 'desconocido', motivo: 'No se pudo consultar el estado del correo.' }
+    }
+    return correo.value
+  }
+
+  /**
+   * Envía al cliente el aviso de una oferta más barata.
+   * El servidor recalcula el ahorro: aquí no se manda ningún importe.
+   */
+  async function notificarCambio({ id_factura, id_oferta, email }) {
+    notificando.value = true
+    try {
+      const r = await comparadorApi.notificar({ id_factura, id_oferta, email })
+      return r.data
+    } finally {
+      notificando.value = false
+    }
+  }
+
   return {
     fuentes,
     precios,
@@ -140,6 +168,8 @@ export const useComparadorStore = defineStore('comparador', () => {
     estadoCatalogo,
     sincronizando,
     resumenSync,
+    correo,
+    notificando,
     cargarEstadoCatalogo,
     sincronizarCatalogo,
     error,
@@ -150,6 +180,8 @@ export const useComparadorStore = defineStore('comparador', () => {
     eliminarOferta,
     simular,
     preguntarAlAsistente,
-    perfilDeFactura
+    perfilDeFactura,
+    cargarEstadoCorreo,
+    notificarCambio
   }
 })

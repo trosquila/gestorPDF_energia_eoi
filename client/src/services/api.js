@@ -94,6 +94,9 @@ export const comparadorApi = {
   simular: (perfil) => api.post('/comparador/simular', perfil),
   asistente: (datos, pregunta) => api.post('/comparador/asistente', { datos, pregunta }, { timeout: 60000 }),
   perfilDeFactura: (id) => api.get(`/comparador/facturas/${id}/perfil`),
+  // Aviso al cliente por correo
+  estadoCorreo: () => api.get('/comparador/correo/estado'),
+  notificar: (data) => api.post('/comparador/notificar', data, { timeout: 30000 }),
   // Catálogo oficial de la CNMC
   sincronizarCatalogo: (fecha) => api.post('/comparador/catalogo/sincronizar', { fecha }, { timeout: 180000 }),
   estadoCatalogo: () => api.get('/comparador/catalogo/estado')

@@ -69,7 +69,13 @@ control-energia/
 │   │   ├── asistente.js      # asistente del comparador + validación de cifras
 │   │   ├── precios.js        # precios horarios de REE con caché
 │   │   ├── coste.js          # fórmula única de coste de una oferta
-│   │   └── cnmc.js           # catálogo de ofertas de la CNMC
+│   │   ├── cnmc.js           # catálogo de ofertas de la CNMC
+│   │   ├── correo.js         # envío: Resend / SMTP / modo registro
+│   │   └── avisoCambio.js    # redacción del correo al cliente
+│   ├── middleware/
+│   │   └── auth.js           # requiereUsuario / requiereAdmin (Bearer uuid)
+│   ├── tests/
+│   │   └── correo.test.js    # validación, transportes y redacción (vitest)
 │   ├── routes/
 │   │   ├── facturas.js       # subida, listado, ficha, edición, baja, asignar cliente
 │   │   ├── usuarios_historial.js  # registro, login, contraseña, usuarios, historial
@@ -113,6 +119,11 @@ control-energia/
 | `OPENAI_API_KEY` | Opcional: `hybridExtract()` rellena con OpenAI los campos que las reglas no encuentran. Sin clave, se queda con las reglas |
 | `PORT` | Por defecto 3000 |
 | `NODE_ENV` | `production` desactiva el `stack` en las respuestas de error |
+| `RESEND_API_KEY` | Envío de avisos por la API de Resend. Basta esta clave |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | Alternativa a Resend (Gmail con contraseña de aplicación, Brevo, Mailtrap…) |
+| `CORREO_REMITENTE` | Remitente que verá el cliente (`Control Energía <avisos@dominio.es>`) |
+| `CORREO_CONTACTO` | Dirección que aparece en el cuerpo para que el cliente responda |
+| `CORREO_TRANSPORTE` | Opcional: `resend`, `smtp` o `registro`; si no, se deduce de las claves |
 
 Valores reales: `[REDACTED]`.
 
@@ -144,6 +155,7 @@ de `server/sql/` se ejecutan a mano en el editor SQL de Supabase, en orden.
 | `11_facturas_campos_energia.sql` | Potencias, consumos y desglose por periodo |
 | `12_ofertas.sql` | Crea `ofertas` (catálogo) |
 | `13_ofertas_cnmc.sql` | `id_externo`, `origen`, `web_oferta`, descuentos, índice único |
+| `14_avisos_cambio.sql` | Crea `avisos_cambio` (correos enviados al cliente) |
 
 ### Tablas
 
@@ -194,6 +206,14 @@ potencia van en **€/kW/año** y los de energía en **€/kWh**.
 `vigencia_hasta`, `fuente`, `activo`, y tras la 13: `id_externo` (único),
 `origen` (manual|cnmc), `web_oferta`, `tipo_plan`, `descuento_energia`,
 `descuento_potencia`.
+
+**`avisos_cambio`** — registro de los correos enviados al cliente:
+`id_aviso` PK, `id_factura`/`id_oferta`/`id_cliente` (FK con `ON DELETE SET NULL`,
+así el histórico sobrevive a bajas), `email_destino`, `asunto`, `cuerpo_texto`,
+`cuerpo_html` (el mensaje exacto), `coste_actual`, `coste_oferta`, `ahorro_mes`,
+`ahorro_anual`, `dias_periodo`, `estado` ∈ {pendiente, enviado, registrado, error},
+`proveedor`, `id_externo`, `error`, `enviado_en`, `id_usuario`, `created_at`.
+Índices por factura, cliente y fecha.
 
 ### Datos de prueba — `scripts/seed-dev.js`
 
@@ -311,8 +331,10 @@ Detalles que costaron sangre y están resueltos:
 
 ## 8. API REST
 
-Todos los routers se montan en `api/index.js` bajo `/api`. **Solo
-`/api/solicitudes` valida identidad**; el resto responde sin token.
+Todos los routers se montan en `api/index.js` bajo `/api`. **Validan identidad
+`/api/solicitudes` (admin) y `POST /api/comparador/notificar` (cualquier usuario
+activo)**; el resto responde sin token. El middleware vive en
+`middleware/auth.js` (`requiereUsuario`, `requiereAdmin`).
 
 | Método | Ruta | Qué hace |
 |---|---|---|
@@ -352,6 +374,8 @@ Todos los routers se montan en `api/index.js` bajo `/api`. **Solo
 | POST | `/api/comparador/simular` | Compara un perfil contra el catálogo |
 | POST | `/api/comparador/asistente` | Pregunta a la IA con los datos de la simulación |
 | GET | `/api/comparador/facturas/:id/perfil` | Perfil de consumo derivado de una factura |
+| GET | `/api/comparador/correo/estado` | Si hay proveedor de correo y cuál (para avisar en la UI) |
+| POST | `/api/comparador/notificar` | 🔒 usuario: envía al cliente el aviso de una oferta más barata |
 
 Errores: manejador único en `api/index.js`. Los de subida (multer, formato)
 devuelven **400**; el resto 500 salvo que la ruta fije otro código. En
@@ -479,6 +503,43 @@ cara. En paralelo devuelve el PVPC estimado.
 descarta la respuesta si aparece alguna cifra que no esté en los datos. Es la
 defensa contra tarifas inventadas.
 
+### Aviso al cliente por correo — `lib/correo.js` y `lib/avisoCambio.js`
+
+`POST /comparador/notificar` (`requiereUsuario`) recibe `{ id_factura, id_oferta,
+email? }`. El servidor **vuelve a calcular el coste** con `costeDeOferta` a partir
+de la factura y la oferta guardadas: no acepta importes del navegador. Si la
+oferta no es más barata responde **409**; si al cliente le falta un correo válido,
+**400** con `requiere_email`; si el mismo aviso (factura + oferta + destinatario)
+ya salió en 24 h, **429**.
+
+Flujo:
+
+1. Perfil desde la factura: potencias contratadas, consumos por periodo,
+   excedentes y `dias_facturados` (el ahorro anual se anualiza con esos días).
+2. `construirAviso()` redacta asunto, texto plano y HTML con:
+   ahorro del periodo y anualizado, tabla de lo que paga ahora frente a la oferta,
+   precios por periodo (€/kWh y €/kW·año) y la invitación a responder al equipo.
+   Todo dato de la base se **escapa** antes de meterlo en el HTML.
+3. `enviarCorreo()` elige transporte: **Resend** (`RESEND_API_KEY`, HTTP),
+   **SMTP** (`nodemailer`, se importa solo en ese modo) o **registro**.
+4. Se guarda el mensaje exacto y el resultado en `avisos_cambio`
+   (`enviado`, `registrado` o `error`).
+
+Decisiones que no son obvias:
+
+- **Sin proveedor no se finge**: el modo `registro` guarda el aviso con estado
+  `registrado` y la UI lo dice. Un correo "enviado" que nunca salió es peor que un
+  error visible.
+- **Si falta la tabla no se pierde el envío**: el correo sale y la respuesta avisa
+  de que hay que ejecutar `sql/14_avisos_cambio.sql`.
+- **Remitente explícito**: `CORREO_REMITENTE`; con SMTP de Gmail hay que usar la
+  misma cuenta que `SMTP_USER` o el proveedor lo rechaza.
+- **Resend necesita dominio verificado** para enviar a terceros; sin él solo
+  acepta el correo del dueño de la cuenta. SMTP con Gmail (contraseña de
+  aplicación) funciona sin dominio propio.
+- El HTML usa tablas y estilos en línea: los clientes de correo no cargan CSS
+  externo ni entienden `flex`/`grid`.
+
 ## 12. Frontend
 
 - **Router** (`src/router/index.js`): rutas con `import()` perezoso (code
@@ -494,6 +555,10 @@ defensa contra tarifas inventadas.
 - **`services/api.js`**: un objeto por dominio (`facturasApi`, `comparadorApi`…)
   con todos los endpoints; interceptor de request (token) y de response (401 → se
   limpia la sesión).
+- **Aviso por correo**: en el ranking, la columna *Avisar* solo se activa con una
+  factura cargada y ahorro positivo; abre un modal donde el correo del cliente se
+  puede corregir sin tocar su ficha. `comparadorApi.notificar()` no manda importes:
+  el servidor recalcula. `cargarEstadoCorreo()` pinta el aviso si no hay proveedor.
 - **Vistas y componentes**: `FacturaView` y `FacturaLoteView` son **dos vistas
   distintas** para el mismo contenido (ficha suelta y ficha dentro de un lote con
   navegación anterior/siguiente). `EditorFactura` es el formulario por bloques con
@@ -617,6 +682,16 @@ curl -s "$API/api/analitica?comercializadora=endesa&fecha_desde=2019-01-01"
 Local: `node api/index.js` en `server/` (puerto 3000) y
 `node node_modules/vite/bin/vite.js` en `client/` (5173).
 
+Pruebas automáticas (vitest, sin base de datos):
+
+```bash
+cd server && npm test        # tests/correo.test.js: validación, transportes y redacción
+```
+
+Para probar el envío sin proveedor real: `npm run seed` no hace falta, basta con
+arrancar un SMTP local (`node smtp-falso.js 2525 salida.eml`) y apuntar
+`SMTP_HOST=127.0.0.1 SMTP_PORT=2525 SMTP_USER=prueba SMTP_PASS=x`.
+
 ## 15. Límites y decisiones tomadas
 
 | Tema | Estado |
@@ -633,3 +708,7 @@ Local: `node api/index.js` en `server/` (puerto 3000) y
 | Paginación | **En el cliente**: la API devuelve la colección entera. Con miles de facturas habría que moverla al servidor (`limit`/`offset` + `count`) para no descargar todo |
 | Cambiar contraseña | El backend (`POST /api/usuarios/change-password`) existe; la ventana en la interfaz está pendiente (el botón avisa) |
 | Datos de prueba | `npm run seed` inserta 101 facturas sintéticas etiquetadas (`ESSEED…`, `DEMO …`); `seed:limpiar` las borra |
+| Correo de avisos | Sin `RESEND_API_KEY` ni `SMTP_*` queda en modo **registro**: no se entrega, y la API/UI lo dicen. `nodemailer` solo se importa en modo SMTP |
+| Tabla de avisos | Si falta `avisos_cambio` el correo sale igual y la respuesta pide ejecutar `sql/14_avisos_cambio.sql`; sin tabla no hay antiduplicado ni histórico |
+| Dominio de correo | Resend exige dominio verificado para enviar a clientes; con Gmail/SMTP se envía desde la propia cuenta sin dominio propio |
+| Datos del aviso | El asunto y el cuerpo se generan en el servidor; el navegador solo manda ids y, opcionalmente, un correo de destino |
