@@ -26,14 +26,84 @@ Reglas:
 - Explica siempre en qué te basas (una factura real, una estimación de PVPC o una oferta del catálogo).
 - No des consejos legales ni prometas ahorros que los datos no respalden.`
 
+const MAPA_PAGINAS = [
+  {
+    ruta: '/',
+    nombre: 'Subida',
+    titulo: 'Subida de facturas',
+    descripcion: 'Pantalla principal para subir facturas (OCR, regex y extracción con IA) y consultar el historial.',
+    palabras: ['subida', 'subir', 'cargar']
+  },
+  {
+    ruta: '/analitica',
+    nombre: 'Analitica',
+    titulo: 'Analítica',
+    descripcion: 'Estadísticas y visualización del consumo y los costes energéticos por periodo.',
+    palabras: ['analitica', 'estadisticas', 'dashboard', 'consumo']
+  },
+  {
+    ruta: '/comparador',
+    nombre: 'Comparador',
+    titulo: 'Comparador de ofertas',
+    descripcion: 'Compara el coste de ofertas de comercializadoras frente a la factura actual y calcula el ahorro.',
+    palabras: ['comparador', 'comparar', 'comercializadoras', 'oferta', 'ahorro', 'coste']
+  },
+  {
+    ruta: '/clientes',
+    nombre: 'Clientes',
+    titulo: 'Clientes',
+    descripcion: 'Gestión de clientes y sus datos de consumo.',
+    palabras: ['clientes', 'cliente']
+  },
+  {
+    ruta: '/solicitudes',
+    nombre: 'Solicitudes',
+    titulo: 'Solicitudes',
+    descripcion: 'Panel de administración / solicitudes.',
+    palabras: ['solicitudes', 'solicitud']
+  },
+  {
+    ruta: '/lote',
+    nombre: 'Lote',
+    titulo: 'Lote de facturas',
+    descripcion: 'Procesamiento por lotes de facturas.',
+    palabras: ['lote', 'lotes']
+  }
+]
+
+function normalizarTexto(valor) {
+  return String(valor || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function resolverRutaNavegacion(pregunta) {
+  const texto = normalizarTexto(pregunta)
+  let mejorRuta = null
+  let mejorScore = 0
+  for (const pagina of MAPA_PAGINAS) {
+    const score = pagina.palabras.filter((p) => texto.includes(normalizarTexto(p))).length
+    if (score > mejorScore) {
+      mejorScore = score
+      mejorRuta = pagina.ruta
+    }
+  }
+  return mejorScore > 0 ? mejorRuta : null
+}
+
 const SISTEMA_GENERAL = `Eres el asistente de la app de gestión de facturas de energía "Control Energía".
 Respondes en español, en tono profesional y directo, en un máximo de 8 líneas.
+
+Conoces el contenido de las secciones de la aplicación:
+${MAPA_PAGINAS.map((p) => `- ${p.titulo} (${p.ruta}): ${p.descripcion}`).join('\n')}
 
 Reglas:
 - Solo ayudas a navegar por la aplicación y a entender cómo funciona cada sección.
 - No inventes datos, cifras ni funcionalidades que no existan en la app.
+- Si el usuario quiere ir a una sección, identifícala con el mapa y responde indicando la navegación.
 - Si no sabes algo, di que no lo sabes en lugar de adivinar.
-- No des consejos legales ni prometas ahorros que no se puedan calcular.`
+- No des consejos legales ni prometes ahorros que no se puedan calcular.`
 
 /** Extrae todos los números del texto (para validar que la IA no inventó). */
 function numerosDe(texto) {
@@ -133,12 +203,24 @@ export async function consultarAsistente({ contexto, pregunta }) {
     { role: 'user', content: contenido }
   ]
 
+  // En modo ayuda: si el usuario pide ir a una sección, resolvemos la ruta destino.
+  let accion = null
+  if (!esComparacion) {
+    const rutaDestino = resolverRutaNavegacion(pregunta)
+    if (rutaDestino) accion = { tipo: 'navegar', ruta: rutaDestino }
+  }
+
   const errores = []
   for (const modelo of MODELOS) {
     try {
       const texto = await llamarModelo(modelo, mensajes, apiKey)
       if (!esComparacion) {
-        return { respuesta: texto, modelo, cifras_verificadas: true }
+        return {
+          respuesta: texto,
+          modelo,
+          cifras_verificadas: true,
+          ...(accion ? { accion } : {})
+        }
       }
       const control = validarCifras(texto, contextoUsado)
       return {

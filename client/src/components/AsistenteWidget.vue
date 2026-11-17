@@ -108,6 +108,9 @@ async function enviar() {
   enviando.value = true
   try {
     const respuesta = await comparador.preguntarAsistente(contexto.value, texto)
+    if (respuesta?.accion?.tipo === 'navegar' && respuesta.accion.ruta) {
+      router.push(respuesta.accion.ruta)
+    }
     mensajes.value.push({
       id: Date.now() + 1,
       rol: 'asistente',
