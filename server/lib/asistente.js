@@ -1,4 +1,5 @@
 import { config } from '../config.js'
+import { getSupabaseClient } from './supabase.js'
 
 /**
  * Asistente del comparador.
@@ -15,6 +16,9 @@ const MODELOS = [
 ]
 
 const TIMEOUT_MS = 30000
+
+const PATRON_CUPS = /ES[0-9A-Z]{10,}/gi
+const PREGUNTA_ACCION = /modifica|modificar|editar|cambiar|cambia|actualiza|actualizar|setea|corregir/i
 
 const SISTEMA_COMPARADOR = `Eres un asesor energético que trabaja para una empresa de gestión de facturas.
 Respondes en español, en tono profesional y directo, en un máximo de 8 líneas.
@@ -143,6 +147,18 @@ export function validarCifras(respuesta, datos) {
   return { valido: inventadas.length === 0, inventadas: inventadas.slice(0, 5) }
 }
 
+/** Busca facturas por CUPS (el "lote" de una factura concreta). */
+async function buscarFacturasPorCups(cups) {
+  const supabase = getSupabaseClient(true)
+  const { data, error } = await supabase
+    .from('facturas')
+    .select('*')
+    .ilike('cups', cups)
+    .limit(50)
+  if (error) return null
+  return data || []
+}
+
 async function llamarModelo(modelo, mensajes, apiKey) {
   const controlador = new AbortController()
   const temporizador = setTimeout(() => controlador.abort(), TIMEOUT_MS)
@@ -192,11 +208,22 @@ export async function consultarAsistente({ contexto, pregunta }) {
   const contextoUsado = contexto || null
   if (!contextoUsado) throw new Error('Falta el contexto de la pregunta')
 
-  const esComparacion = Boolean(contextoUsado.ofertas || contextoUsado.perfil)
+  let contextoAjustado = contextoUsado
+  let facturasEncontradas = null
+  const matchCups = String(pregunta || '').toUpperCase().match(PATRON_CUPS)
+  if (matchCups) {
+    const facturas = await buscarFacturasPorCups(matchCups[0])
+    if (facturas) {
+      contextoAjustado = { ...contextoUsado, facturas }
+      facturasEncontradas = facturas
+    }
+  }
+
+  const esComparacion = Boolean(contextoAjustado.ofertas || contextoAjustado.perfil)
   const systemPrompt = esComparacion ? SISTEMA_COMPARADOR : SISTEMA_GENERAL
   const contenido = esComparacion
-    ? `DATOS (JSON):\n${JSON.stringify(contextoUsado)}\n\nPREGUNTA: ${pregunta || '¿Qué oferta me conviene y por qué? Resume el ahorro.'}`
-    : `CONTEXTO (JSON):\n${JSON.stringify(contextoUsado)}\n\nPREGUNTA: ${pregunta || 'Explícame cómo funciona esta sección de la aplicación.'}`
+    ? `DATOS (JSON):\n${JSON.stringify(contextoAjustado)}\n\nPREGUNTA: ${pregunta || '¿Qué oferta me conviene y por qué? Resume el ahorro.'}`
+    : `CONTEXTO (JSON):\n${JSON.stringify(contextoAjustado)}\n\nPREGUNTA: ${pregunta || 'Explícame cómo funciona esta sección de la aplicación.'}`
 
   const mensajes = [
     { role: 'system', content: systemPrompt },
@@ -206,8 +233,14 @@ export async function consultarAsistente({ contexto, pregunta }) {
   // En modo ayuda: si el usuario pide ir a una sección, resolvemos la ruta destino.
   let accion = null
   if (!esComparacion) {
+    const preguntaAccion = PREGUNTA_ACCION.test(String(pregunta || ''))
     const rutaDestino = resolverRutaNavegacion(pregunta)
-    if (rutaDestino) accion = { tipo: 'navegar', ruta: rutaDestino }
+    if (facturasEncontradas && facturasEncontradas.length > 0 && preguntaAccion) {
+      // Instrucción tipo "modifica el campo consumo de la factura con cup X": llevamos a la factura concreta.
+      accion = { tipo: 'navegar', ruta: `/factura/${facturasEncontradas[0].id_factura}` }
+    } else if (rutaDestino) {
+      accion = { tipo: 'navegar', ruta: rutaDestino }
+    }
   }
 
   const errores = []
