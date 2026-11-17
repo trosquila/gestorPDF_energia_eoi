@@ -130,7 +130,7 @@ export async function consultarAsistente({ contexto, pregunta }) {
 
   const mensajes = [
     { role: 'system', content: systemPrompt },
-    { role: 'user', content }
+    { role: 'user', content: contenido }
   ]
 
   const errores = []
