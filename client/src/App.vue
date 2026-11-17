@@ -85,6 +85,8 @@
         <RouterView />
       </div>
     </main>
+
+    <AsistenteWidget />
   </div>
 </template>
 
@@ -93,6 +95,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import { useSolicitudesStore } from './stores/solicitudes'
+import AsistenteWidget from './components/AsistenteWidget.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()

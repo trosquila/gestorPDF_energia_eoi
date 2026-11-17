@@ -16,7 +16,7 @@ const MODELOS = [
 
 const TIMEOUT_MS = 30000
 
-const SISTEMA = `Eres un asesor energético que trabaja para una empresa de gestión de facturas.
+const SISTEMA_COMPARADOR = `Eres un asesor energético que trabaja para una empresa de gestión de facturas.
 Respondes en español, en tono profesional y directo, en un máximo de 8 líneas.
 
 Reglas:
@@ -25,6 +25,15 @@ Reglas:
 - No inventes comercializadoras ni tarifas que no estén en DATOS.
 - Explica siempre en qué te basas (una factura real, una estimación de PVPC o una oferta del catálogo).
 - No des consejos legales ni prometas ahorros que los datos no respalden.`
+
+const SISTEMA_GENERAL = `Eres el asistente de la app de gestión de facturas de energía "Control Energía".
+Respondes en español, en tono profesional y directo, en un máximo de 8 líneas.
+
+Reglas:
+- Solo ayudas a navegar por la aplicación y a entender cómo funciona cada sección.
+- No inventes datos, cifras ni funcionalidades que no existan en la app.
+- Si no sabes algo, di que no lo sabes en lugar de adivinar.
+- No des consejos legales ni prometas ahorros que no se puedan calcular.`
 
 /** Extrae todos los números del texto (para validar que la IA no inventó). */
 function numerosDe(texto) {
@@ -102,26 +111,36 @@ async function llamarModelo(modelo, mensajes, apiKey) {
 }
 
 /**
- * Pregunta al asistente con el resultado del comparador como contexto.
- * @param {{ datos: object, pregunta?: string }} opciones
+ * Pregunta al asistente. `contexto` es el resultado de la comparación cuando
+ * existe (modo comparador) o el contexto de la página cuando no (modo ayuda).
+ * @param {{ contexto?: object, pregunta?: string }} opciones
  */
-export async function consultarAsistente({ datos, pregunta }) {
+export async function consultarAsistente({ contexto, pregunta }) {
   const apiKey = config.openrouter?.apiKey
   if (!apiKey) throw new Error('Falta OPENROUTER_API_KEY en el servidor')
 
+  const contextoUsado = contexto || null
+  if (!contextoUsado) throw new Error('Falta el contexto de la pregunta')
+
+  const esComparacion = Boolean(contextoUsado.ofertas || contextoUsado.perfil)
+  const systemPrompt = esComparacion ? SISTEMA_COMPARADOR : SISTEMA_GENERAL
+  const contenido = esComparacion
+    ? `DATOS (JSON):\n${JSON.stringify(contextoUsado)}\n\nPREGUNTA: ${pregunta || '¿Qué oferta me conviene y por qué? Resume el ahorro.'}`
+    : `CONTEXTO (JSON):\n${JSON.stringify(contextoUsado)}\n\nPREGUNTA: ${pregunta || 'Explícame cómo funciona esta sección de la aplicación.'}`
+
   const mensajes = [
-    { role: 'system', content: SISTEMA },
-    {
-      role: 'user',
-      content: `DATOS (JSON):\n${JSON.stringify(datos)}\n\nPREGUNTA: ${pregunta || '¿Qué oferta me conviene y por qué? Resume el ahorro.'}`
-    }
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content }
   ]
 
   const errores = []
   for (const modelo of MODELOS) {
     try {
       const texto = await llamarModelo(modelo, mensajes, apiKey)
-      const control = validarCifras(texto, datos)
+      if (!esComparacion) {
+        return { respuesta: texto, modelo, cifras_verificadas: true }
+      }
+      const control = validarCifras(texto, contextoUsado)
       return {
         respuesta: texto,
         modelo,

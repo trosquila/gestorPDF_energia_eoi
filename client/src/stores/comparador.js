@@ -111,12 +111,17 @@ export const useComparadorStore = defineStore('comparador', () => {
     }
   }
 
-  async function preguntarAlAsistente(pregunta) {
-    if (!resultado.value) throw new Error('Primero calcula una comparación')
+  /**
+   * Pregunta al asistente. `contexto` es el resultado de la comparación cuando
+   * existe (modo comparador) o el contexto de la página cuando no (modo ayuda).
+   */
+  async function preguntarAsistente(contexto, pregunta) {
+    const contextoUsado = contexto || null
+    if (!contextoUsado) throw new Error('Falta el contexto de la pregunta')
     error.value = null
     asistente.value = null
     try {
-      const r = await comparadorApi.asistente(resultado.value, pregunta)
+      const r = await comparadorApi.asistente(contextoUsado, pregunta)
       asistente.value = r.data.data || r.data
       return asistente.value
     } catch (e) {
@@ -179,7 +184,7 @@ export const useComparadorStore = defineStore('comparador', () => {
     crearOferta,
     eliminarOferta,
     simular,
-    preguntarAlAsistente,
+    preguntarAsistente,
     perfilDeFactura,
     cargarEstadoCorreo,
     notificarCambio

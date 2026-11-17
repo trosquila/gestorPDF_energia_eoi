@@ -570,10 +570,10 @@ router.post('/simular', async (req, res, next) => {
 // === Asistente IA ===
 router.post('/asistente', async (req, res, next) => {
   try {
-    const { datos, pregunta } = req.body || {}
-    if (!datos) return res.status(400).json({ error: 'Faltan los datos de la comparación' })
+    const { contexto, pregunta } = req.body || {}
+    if (!contexto) return res.status(400).json({ error: 'Faltan los datos de la comparación o el contexto' })
 
-    const resultado = await consultarAsistente({ datos, pregunta })
+    const resultado = await consultarAsistente({ contexto, pregunta })
     res.json({ data: resultado })
   } catch (error) {
     res.status(502).json({ error: `El asistente no pudo responder: ${error.message}` })

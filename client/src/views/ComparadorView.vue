@@ -211,40 +211,6 @@
       </div>
     </div>
 
-    <!-- ===== Asistente ===== -->
-    <div class="card">
-      <div class="card-header">
-        <h3>Asistente</h3>
-        <span class="eyebrow">solo usa las cifras de esta comparación</span>
-      </div>
-      <div class="card-body">
-        <div class="fila-factura">
-          <input
-            v-model="pregunta"
-            class="form-input"
-            placeholder="¿Qué oferta me conviene? ¿Cuánto ahorraría?"
-            :disabled="!comparador.resultado" />
-          <button class="btn btn-primary" :disabled="!comparador.resultado || preguntando" @click="preguntar">
-            {{ preguntando ? 'Analizando…' : 'Analizar con IA' }}
-          </button>
-        </div>
-        <p v-if="!comparador.resultado" class="texto-ayuda">
-          Primero calcula una comparación para que el asistente tenga datos reales.
-        </p>
-        <div v-if="comparador.asistente" class="respuesta-ia">
-          <p class="texto-respuesta">{{ comparador.asistente.respuesta }}</p>
-          <p class="meta-ia">
-            Modelo: {{ comparador.asistente.modelo }} ·
-            <span :class="comparador.asistente.cifras_verificadas ? 'ok' : 'aviso'">
-              {{ comparador.asistente.cifras_verificadas
-                ? 'todas las cifras están en los datos'
-                : 'hay cifras sin respaldo: ' + comparador.asistente.cifras_inventadas.join(', ') }}
-            </span>
-          </p>
-        </div>
-      </div>
-    </div>
-
     <!-- ===== Catálogo de ofertas ===== -->
     <div class="card">
       <div class="card-header">
@@ -455,8 +421,6 @@ const fuentes = computed(() => comparador.fuentes)
 const fuenteElegida = ref('ree')
 const facturasConPerfil = ref([])
 const facturaElegida = ref('')
-const pregunta = ref('')
-const preguntando = ref(false)
 const mostrarFormulario = ref(false)
 const guardandoOferta = ref(false)
 const errorOferta = ref(null)
@@ -622,17 +586,6 @@ async function comparar() {
     consumos: limpiar(perfil.value.consumos),
     factura_id: facturaElegida.value || null
   })
-}
-
-async function preguntar() {
-  preguntando.value = true
-  try {
-    await comparador.preguntarAlAsistente(pregunta.value)
-  } catch (e) {
-    // el store ya guarda el mensaje
-  } finally {
-    preguntando.value = false
-  }
 }
 
 async function guardarOferta() {
@@ -916,25 +869,6 @@ onMounted(async () => {
 }
 
 .nota-legal { margin-top: 1rem; font-size: 0.75rem; }
-
-.respuesta-ia {
-  margin-top: 1rem;
-  padding: 0.9rem 1rem;
-  border-radius: 8px;
-  background: #eff6ff;
-  border-left: 4px solid var(--color-primary);
-}
-
-.texto-respuesta { font-size: 0.875rem; white-space: pre-line; }
-
-.meta-ia {
-  margin-top: 0.6rem;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-
-.meta-ia .ok { color: var(--color-success); font-weight: 600; }
-.meta-ia .aviso { color: var(--color-warning); font-weight: 600; }
 
 .aviso-error {
   font-size: 0.8125rem;

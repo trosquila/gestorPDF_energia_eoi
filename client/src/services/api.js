@@ -92,7 +92,7 @@ export const comparadorApi = {
   actualizarOferta: (id, data) => api.patch(`/comparador/ofertas/${id}`, data),
   eliminarOferta: (id) => api.delete(`/comparador/ofertas/${id}`),
   simular: (perfil) => api.post('/comparador/simular', perfil),
-  asistente: (datos, pregunta) => api.post('/comparador/asistente', { datos, pregunta }, { timeout: 60000 }),
+  asistente: (contexto, pregunta) => api.post('/comparador/asistente', { contexto, pregunta }, { timeout: 60000 }),
   perfilDeFactura: (id) => api.get(`/comparador/facturas/${id}/perfil`),
   // Aviso al cliente por correo
   estadoCorreo: () => api.get('/comparador/correo/estado'),
