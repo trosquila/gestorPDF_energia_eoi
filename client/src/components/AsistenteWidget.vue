@@ -71,9 +71,11 @@ const NOMBRES_PAGINA = {
 }
 
 const contexto = computed(() => {
-  const nombre = NOMBRES_PAGINA[router.currentRoute.value.name] || router.currentRoute.value.name || router.currentRoute.value.path
-  const ctx = { pagina: String(nombre) }
+  const ruta = router.currentRoute.value
+  const nombre = NOMBRES_PAGINA[ruta.name] || ruta.name || ruta.path
+  const ctx = { pagina: String(nombre), ruta: String(ruta.path) }
   if (comparador.resultado) ctx.resultado = comparador.resultado
+  if (ruta.name === 'Factura') ctx.factura_id = ruta.params?.id
   return ctx
 })
 
