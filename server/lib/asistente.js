@@ -252,6 +252,12 @@ export async function consultarAsistente({ contexto, pregunta }) {
     if (facturasEncontradas && facturasEncontradas.length > 0 && preguntaAccion) {
       // Instrucción tipo "modifica el campo consumo de la factura con cup X": llevamos a la factura concreta.
       accion = { tipo: 'navegar', ruta: `/factura/${facturasEncontradas[0].id_factura}` }
+    } else if (contextoUsado?.factura_id && preguntaAccion) {
+      // Instrucción de modificación sobre la factura de la pantalla actual: la llevamos al detalle.
+      accion = { tipo: 'navegar', ruta: `/factura/${contextoUsado.factura_id}` }
+    } else if (preguntaAccion) {
+      // Instrucción de modificación: llevamos a la sección donde se edita.
+      accion = { tipo: 'navegar', ruta: String(contextoAjustado?.ruta || contextoUsado?.ruta || '/lote') }
     } else if (rutaDestino) {
       accion = { tipo: 'navegar', ruta: rutaDestino }
     }
