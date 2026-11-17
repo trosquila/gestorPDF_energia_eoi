@@ -102,6 +102,8 @@ Respondes en español, en tono profesional y directo, en un máximo de 8 líneas
 Conoces el contenido de las secciones de la aplicación:
 ${MAPA_PAGINAS.map((p) => `- ${p.titulo} (${p.ruta}): ${p.descripcion}`).join('\n')}
 
+Rutas exactas de la app: /, /analitica, /comparador, /clientes, /solicitudes, /lote.
+
 Reglas:
 - Solo ayudas a navegar por la aplicación y a entender cómo funciona cada sección.
 - No inventes datos, cifras ni funcionalidades que no existan en la app.
@@ -157,6 +159,18 @@ async function buscarFacturasPorCups(cups) {
     .limit(50)
   if (error) return null
   return data || []
+}
+
+const RUTAS_VALIDAS = ['/', '/analitica', '/comparador', '/clientes', '/solicitudes', '/lote']
+
+/** Elimina rutas inventadas por la IA, sustituyéndolas por la ruta conocida del contexto. */
+function sanitizarRutas(texto, rutaFallback) {
+  const base = String(rutaFallback || '/lote')
+  return String(texto || '').replace(/\/[a-z][a-z\-]*/gi, (ruta) => {
+    const rutaLimpia = '/' + ruta.slice(1).toLowerCase()
+    if (RUTAS_VALIDAS.includes(rutaLimpia)) return rutaLimpia
+    return base
+  })
 }
 
 async function llamarModelo(modelo, mensajes, apiKey) {
@@ -247,17 +261,18 @@ export async function consultarAsistente({ contexto, pregunta }) {
   for (const modelo of MODELOS) {
     try {
       const texto = await llamarModelo(modelo, mensajes, apiKey)
+      const respuestaLimpia = sanitizarRutas(texto, contextoAjustado?.ruta || contextoUsado?.ruta || '/lote')
       if (!esComparacion) {
         return {
-          respuesta: texto,
+          respuesta: respuestaLimpia,
           modelo,
           cifras_verificadas: true,
           ...(accion ? { accion } : {})
         }
       }
-      const control = validarCifras(texto, contextoUsado)
+      const control = validarCifras(respuestaLimpia, contextoUsado)
       return {
-        respuesta: texto,
+        respuesta: respuestaLimpia,
         modelo,
         cifras_verificadas: control.valido,
         cifras_inventadas: control.inventadas
