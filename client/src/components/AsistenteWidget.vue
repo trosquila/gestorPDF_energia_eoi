@@ -12,7 +12,6 @@
       <div class="asistente-mensajes" ref="cajaMensajes">
         <div v-for="m in mensajes" :key="m.id" class="msg" :class="m.rol">
           {{ m.texto }}
-          <span v-if="m.meta" class="msg-meta">Modelo: {{ m.meta.modelo }}</span>
         </div>
       </div>
 
@@ -116,8 +115,7 @@ async function enviar() {
     mensajes.value.push({
       id: Date.now() + 1,
       rol: 'asistente',
-      texto: respuesta?.respuesta || 'No pude responder ahora mismo. Inténtalo de nuevo en unos momentos.',
-      meta: respuesta
+      texto: respuesta?.respuesta || 'No pude responder ahora mismo. Inténtalo de nuevo en unos momentos.'
     })
   } catch (e) {
     mensajes.value.push({
@@ -204,7 +202,6 @@ async function enviar() {
 .msg { max-width: 85%; padding: 0.55rem 0.75rem; border-radius: 12px; font-size: 0.85rem; white-space: pre-line; line-height: 1.45; }
 .msg.asistente { align-self: flex-start; background: var(--color-surface); border: 1px solid var(--color-border); border-bottom-left-radius: 4px; }
 .msg.usuario { align-self: flex-end; background: var(--color-primary); color: #fff; border-bottom-right-radius: 4px; }
-.msg-meta { display: block; margin-top: 0.25rem; font-size: 0.68rem; color: var(--color-text-muted); }
 
 .asistente-form { display: flex; gap: 0.5rem; padding: 0.75rem; border-top: 1px solid var(--color-border); background: var(--color-surface); }
 .asistente-input { flex: 1; }
